@@ -28,16 +28,12 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class EventService {
 
-    /** Code danh mục "Sinh nhật" trong bảng event_categories — xem V13 migration. */
-    private static final String BIRTHDAY_CATEGORY_CODE = "SINH_NHAT";
-
     private final EventRepository eventRepo;
     private final RelativeRepository relativeRepo;
     private final UserRepository userRepo;
     private final EventParticipantRepository participantRepo;
     private final EventCategoryRepository categoryRepo;
     private final NotificationRepository notificationRepo;
-    private final RelativeService relativeService;
 
     // ── GET CATEGORIES (picker "Danh mục" khi Thêm/Sửa sự kiện) ─────────
     // Chỉ trả danh mục hệ thống (isSystem=true) — danh mục user tự tạo
@@ -131,8 +127,6 @@ public class EventService {
         if (relative != null)
             relativeRepo.incrementEventCount(relative.getId());
 
-        syncRelativeBirthdayIfNeeded(category, relative, userId, saved.getEventDate());
-
         log.info("[Event] Tao thanh cong: eventId={} userId={} title={}",
             saved.getId(), userId, saved.getTitle());
         return toResponse(saved, LocalDate.now());
@@ -190,10 +184,7 @@ public class EventService {
             event.getReminders().addAll(buildReminders(req.getReminders(), event));
         }
 
-        Event saved = eventRepo.save(event);
-        syncRelativeBirthdayIfNeeded(category, newRelative, userId, saved.getEventDate());
-
-        EventResponse response = toResponse(saved, LocalDate.now());
+        EventResponse response = toResponse(eventRepo.save(event), LocalDate.now());
         log.info("[Event] Cap nhat thanh cong: eventId={} userId={}", id, userId);
         return response;
     }
@@ -211,18 +202,6 @@ public class EventService {
     }
 
     // ── PRIVATE HELPERS ─────────────────────────────────────────────────
-
-    /**
-     * Event "Sinh nhật" và Relative.dateOfBirth là 1 — nếu Event vừa lưu
-     * thuộc danh mục Sinh nhật và có gắn người thân, đẩy eventDate mới
-     * ngược lại thành dateOfBirth của người đó (chiều Relative -> Event
-     * nằm ở RelativeService.syncBirthdayEvent).
-     */
-    private void syncRelativeBirthdayIfNeeded(EventCategory category, Relative relative, Long userId, LocalDate eventDate) {
-        if (relative == null) return;
-        if (!BIRTHDAY_CATEGORY_CODE.equals(category.getCode())) return;
-        relativeService.syncDateOfBirthFromEvent(relative.getId(), userId, eventDate);
-    }
 
     /** Parse recurrenceType string -> enum, báo lỗi rõ ràng cho client thay vì 500. */
     private Event.RecurrenceType resolveRecurrenceType(String raw) {
@@ -301,7 +280,6 @@ public class EventService {
                 .id(e.getId())
                 .title(e.getTitle())
                 .categoryId(e.getCategory().getId())
-                .categoryCode(e.getCategory().getCode())
                 .categoryName(e.getCategory().getDisplayName())
                 .categoryIcon(e.getCategory().getIcon())
                 .categoryColor(e.getCategory().getColorHex())

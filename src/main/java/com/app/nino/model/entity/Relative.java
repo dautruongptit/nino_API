@@ -41,18 +41,6 @@ public class Relative {
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
-    /**
-     * false = phần NĂM của dateOfBirth chỉ là giá trị đại diện (mobile gửi
-     * 1900) do người dùng không nhớ rõ năm sinh — chỉ Tháng/Ngày đáng tin,
-     * không dùng để tính tuổi (RelativeService.getDetail). Không ảnh hưởng
-     * việc tính "sinh nhật lần tới" (RelativeService.nextBirthdayOccurrence
-     * vốn chỉ dùng tháng/ngày). true = năm sinh thật, dữ liệu cũ mặc định
-     * true (V23_20260906_add_relative_dob_year_known.sql).
-     */
-    @Column(name = "date_of_birth_year_known", nullable = false)
-    @Builder.Default
-    private Boolean dateOfBirthYearKnown = true;
-
     @Column(name = "location", length = 200)
     private String location;
 

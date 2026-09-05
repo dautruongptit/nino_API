@@ -52,13 +52,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     List<Event> findByRelativeIdAndIsActiveTrueOrderByEventDateAsc(Long relativeId);
 
-    /**
-     * Event "Sinh nhật" đang active gắn với 1 người thân — dùng để đồng bộ
-     * 1-chiều-1 với {@code Relative.dateOfBirth} (RelativeService): mỗi
-     * người thân có tối đa 1 Event loại này.
-     */
-    Optional<Event> findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(Long relativeId, String code);
-
     // ── Ownership check ──────────────────────────────────────────────────
 
     @Query("SELECT e FROM Event e WHERE e.id = :id AND e.user.id = :userId")
