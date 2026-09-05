@@ -57,7 +57,9 @@ public class RelativeService {
     }
 
     // ── GET DETAIL — cache 10 phút ────────────────────────────────────────────
-    @Cacheable(value = "relativeDetail", key = "#id")
+    // Key PHAI gom ca userId — key theo #id thoi se lam cache-hit bo qua
+    // findByIdAndUserId (check quyen so huu), lo du lieu Relative giua cac user (IDOR).
+    @Cacheable(value = "relativeDetail", key = "#id + '::' + #userId")
     public RelativeDetailResponse getDetail(Long id, Long userId) {
         Relative relative = relativeRepo.findByIdAndUserId(id, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Relative", id));
@@ -105,7 +107,7 @@ public class RelativeService {
     // ── UPDATE — evict list + detail + home ───────────────────────────────────
     @Caching(evict = {
         @CacheEvict(value = "relatives",     allEntries = true),
-        @CacheEvict(value = "relativeDetail", key = "#id"),
+        @CacheEvict(value = "relativeDetail", key = "#id + '::' + #userId"),
         @CacheEvict(value = "home",           key = "#userId")
     })
     @Transactional
@@ -133,7 +135,7 @@ public class RelativeService {
     // ── DELETE — evict tất cả liên quan ──────────────────────────────────────
     @Caching(evict = {
         @CacheEvict(value = "relatives",     allEntries = true),
-        @CacheEvict(value = "relativeDetail", key = "#id"),
+        @CacheEvict(value = "relativeDetail", key = "#id + '::' + #userId"),
         @CacheEvict(value = "home",           key = "#userId"),
         @CacheEvict(value = "events",         allEntries = true)
     })

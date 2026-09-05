@@ -36,6 +36,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,6 +48,16 @@ public class AuthService {
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final int LOCK_DURATION_MINUTES = 30;
     private static final String UPLOAD_DIR = "uploads/avatars/";
+
+    // Whitelist content-type -> extension. Ten file luu tren dia luon do server
+    // sinh ra tu day, KHONG bao gio dung ten/duoi file client gui len — vua chan
+    // path traversal, vua chan upload file khong phai anh (html/svg co script...).
+    private static final Map<String, String> ALLOWED_AVATAR_TYPES = Map.of(
+        "image/jpeg", ".jpg",
+        "image/png",  ".png",
+        "image/webp", ".webp",
+        "image/gif",  ".gif"
+    );
 
     private final UserRepository         userRepo;
     private final RoleRepository         roleRepo;
@@ -196,18 +207,18 @@ public class AuthService {
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
+        String extension = ALLOWED_AVATAR_TYPES.get(file.getContentType());
+        if (extension == null) {
+            throw new BadRequestException("Chỉ chấp nhận ảnh JPEG/PNG/WEBP/GIF");
+        }
+
         try {
             Path uploadDir = Paths.get(UPLOAD_DIR).toAbsolutePath().normalize();
             Files.createDirectories(uploadDir);
 
-            // originalFilename la client-controlled — chi lay ten file (bo moi
-            // thanh phan thu muc/"..") de tranh path traversal ghi file ra ngoai UPLOAD_DIR.
-            String originalFilename = file.getOriginalFilename();
-            String safeBaseName = (originalFilename == null || originalFilename.isBlank())
-                ? "avatar"
-                : Paths.get(originalFilename).getFileName().toString();
-            String filename = UUID.randomUUID() + "_" + safeBaseName;
-
+            // Ten file hoan toan do server sinh (UUID + duoi tu content-type da whitelist)
+            // — khong dung filename client gui len nen khong the path-traversal.
+            String filename = UUID.randomUUID() + extension;
             Path path = uploadDir.resolve(filename).normalize();
             if (!path.getParent().equals(uploadDir)) {
                 throw new BadRequestException("Tên file không hợp lệ");

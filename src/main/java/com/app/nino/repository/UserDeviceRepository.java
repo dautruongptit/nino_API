@@ -18,10 +18,6 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, Long> {
     boolean existsByFcmToken(String fcmToken);
 
     @Modifying
-    @Query("DELETE FROM UserDevice d WHERE d.fcmToken = :fcmToken")
-    void deleteByFcmToken(@Param("fcmToken") String fcmToken);
-
-    @Modifying
     @Query("DELETE FROM UserDevice d WHERE d.fcmToken = :fcmToken AND d.user.id = :userId")
     void deleteByFcmTokenAndUserId(@Param("fcmToken") String fcmToken, @Param("userId") Long userId);
 
