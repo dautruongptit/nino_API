@@ -19,6 +19,7 @@ public class RelativeDetailResponse {
     private String groupType;
     private String gender;
     private LocalDate dateOfBirth;
+    private Boolean dateOfBirthYearKnown;
     private Integer age;
     private Long daysToBirthday;
     private String location;
@@ -39,6 +40,7 @@ public class RelativeDetailResponse {
             .groupType(r.getGroupType() != null ? r.getGroupType().name() : null)
             .gender(r.getGender() != null ? r.getGender().name() : null)
             .dateOfBirth(r.getDateOfBirth())
+            .dateOfBirthYearKnown(r.getDateOfBirthYearKnown())
             .age(age >= 0 ? age : null)
             .daysToBirthday(daysToBirthday)
             .location(r.getLocation())
