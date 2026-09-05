@@ -197,9 +197,22 @@ public class AuthService {
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
         try {
-            Files.createDirectories(Paths.get(UPLOAD_DIR));
-            String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-            Path path = Paths.get(UPLOAD_DIR + filename);
+            Path uploadDir = Paths.get(UPLOAD_DIR).toAbsolutePath().normalize();
+            Files.createDirectories(uploadDir);
+
+            // originalFilename la client-controlled — chi lay ten file (bo moi
+            // thanh phan thu muc/"..") de tranh path traversal ghi file ra ngoai UPLOAD_DIR.
+            String originalFilename = file.getOriginalFilename();
+            String safeBaseName = (originalFilename == null || originalFilename.isBlank())
+                ? "avatar"
+                : Paths.get(originalFilename).getFileName().toString();
+            String filename = UUID.randomUUID() + "_" + safeBaseName;
+
+            Path path = uploadDir.resolve(filename).normalize();
+            if (!path.getParent().equals(uploadDir)) {
+                throw new BadRequestException("Tên file không hợp lệ");
+            }
+
             Files.copy(file.getInputStream(), path);
             user.setAvatarUrl("/uploads/avatars/" + filename);
         } catch (IOException e) {

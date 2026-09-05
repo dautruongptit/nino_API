@@ -71,10 +71,13 @@ public class DeviceController {
     @DeleteMapping
     @Operation(summary = "Hủy đăng ký FCM token (gọi khi logout)")
     public ResponseEntity<BaseResponse<?>> unregisterDevice(
+            @AuthenticationPrincipal Long userId,
             @RequestBody Map<String, String> body) {
 
         String fcmToken = body.get("fcmToken");
-        deviceRepo.deleteByFcmToken(fcmToken);
+        // Chi xoa neu token dung la cua chinh user dang goi — tranh IDOR
+        // (truoc day xoa theo fcmToken bat ky, cho phep huy dang ky thiet bi cua nguoi khac).
+        deviceRepo.deleteByFcmTokenAndUserId(fcmToken, userId);
         return ResponseEntity.ok(BaseResponse.success(null, "Đã hủy đăng ký thiết bị"));
     }
 
