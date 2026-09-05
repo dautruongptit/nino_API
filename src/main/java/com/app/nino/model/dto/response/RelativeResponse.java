@@ -19,6 +19,7 @@ public class RelativeResponse {
     private String groupType;
     private String gender;
     private LocalDate dateOfBirth;
+    private Boolean dateOfBirthYearKnown;
     private String location;
     private BigDecimal heightCm;
     private BigDecimal weightKg;
@@ -38,6 +39,7 @@ public class RelativeResponse {
             .groupType(r.getGroupType() != null ? r.getGroupType().name() : null)
             .gender(r.getGender() != null ? r.getGender().name() : null)
             .dateOfBirth(r.getDateOfBirth())
+            .dateOfBirthYearKnown(r.getDateOfBirthYearKnown())
             .location(r.getLocation())
             .heightCm(r.getHeightCm())
             .weightKg(r.getWeightKg())

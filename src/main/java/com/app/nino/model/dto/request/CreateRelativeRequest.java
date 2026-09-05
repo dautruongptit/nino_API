@@ -20,6 +20,8 @@ public class CreateRelativeRequest {
     private String gender;      // MALE, FEMALE, OTHER
 
     private LocalDate dateOfBirth;
+    /** null/true = năm sinh thật; false = chỉ Tháng/Ngày đáng tin (không nhớ năm), xem Relative.dateOfBirthYearKnown. */
+    private Boolean dateOfBirthYearKnown;
     private String location;
     private BigDecimal heightCm;
     private BigDecimal weightKg;
