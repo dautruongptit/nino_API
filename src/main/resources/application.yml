@@ -1,0 +1,145 @@
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api/v1
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+# ── SPRING ──────────────────────────────────────────────────────
+spring:
+  application:
+    name: nino_app
+
+  datasource:
+    url: ${DB_URL:jdbc:mysql://100.106.5.35:3306/event_app?useSSL=false&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:1234567890}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      keepalive-time: ${DB_KEEPALIVE_TIME:120000}
+      pool-name: NinoPool
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    show-sql: ${JPA_SHOW_SQL:true}
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: Asia/Ho_Chi_Minh
+  # ── JACKSON ─────────────────────────────────────────────────
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
+    time-zone: ${APP_TIMEZONE:Asia/Ho_Chi_Minh}
+    default-property-inclusion: non_null        # Bo qua field null trong JSON
+
+  # ── MULTIPART (upload avatar) ────────────────────────────────
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:5MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:6MB}
+
+  # ── MESSAGES / i18n ─────────────────────────────────────────
+  messages:
+    basename: classpath:i18n/messages           # Doc tu MessageConfig.java
+    encoding: UTF-8
+    cache-duration: 3600s
+
+  # ── TASK SCHEDULING (ReminderScheduler) ─────────────────────
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULER_POOL_SIZE:2}          # So thread cho @Scheduled
+  # spring.data.redis #
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX:8}
+          max-idle:   ${REDIS_POOL_IDLE:4}
+          min-idle:   1
+          max-wait:   1000ms
+# ── APP CUSTOM PROPERTIES ───────────────────────────────────────
+app:
+  jwt:
+    secret: ${JWT_SECRET}                       # BAT BUOC — khong co default
+    expiration: ${JWT_EXPIRATION:86400000}      # Access token: 24h (ms)
+    refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}  # 7 ngay (ms)
+  # Upload avatar
+  upload:
+    avatar-dir: ${UPLOAD_AVATAR_DIR:uploads/avatars}
+  # Timezone
+  timezone: ${APP_TIMEZONE:Asia/Ho_Chi_Minh}
+  openapi:
+    dev-url: http://localhost:8086
+    prod-url: https://nino-api.thongtinchinhhieu.site
+  firebase:
+    credentials-path: firebase-service-account.json
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}             # OAuth 2.0 Client ID tu Google Cloud Console
+# ── ACTUATOR ────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: ${ACTUATOR_ENDPOINTS:health,info}
+  endpoint:
+    health:
+      show-details: when-authorized             # Chi hien thi khi co JWT
+  info:
+    app:
+      name: Nino
+      version: "@project.version@"
+
+# ── LOGGING ─────────────────────────────────────────────────────
+logging:
+  level:
+    root:                          WARN
+    com.app.nino:                ${LOG_LEVEL_APP:INFO}
+    org.springframework.security:  ${LOG_LEVEL_SECURITY:WARN}
+    org.hibernate.SQL:             ${LOG_LEVEL_SQL:WARN}
+    org.hibernate.type.descriptor: WARN
+    com.zaxxer.hikari:             WARN
+    org.hibernate.orm.jdbc.bind: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n"
+    file:    "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE:logs/nino-app.log}
+    max-size: 100MB
+    max-history: 30
+# ── SPRINGDOC / SWAGGER UI ──────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /api-docs                    # JSON spec endpoint
+    enabled: ${SWAGGER_ENABLED:true}   # tat o production
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${SWAGGER_ENABLED:true}
+    operationsSorter: method           # sort theo GET/POST/PUT/DELETE
+    tagsSorter: alpha                  # sort tag theo alphabet
+    tryItOutEnabled: true              # bat nut Try it out
+    filter: true                       # o search box
+  packages-to-scan: com.app.nino.controller
+  paths-to-match: /**

@@ -1,0 +1,34 @@
+# ============================================================
+# application-prod.yml — override rieng cho PRODUCTION
+# (Ubuntu server, chay bang Docker; kich hoat qua
+#  SPRING_PROFILES_ACTIVE=prod trong docker-compose.prod.yml)
+#
+# File nay CHI chua nhung gia tri can khac voi application.yml
+# (base). Moi thu khong khai bao lai o day van lay tu application.yml,
+# roi duoc .env dien vao qua placeholder ${...}.
+# ============================================================
+
+# ── SWAGGER / OPENAPI — tat mac dinh o prod (van bat lai duoc
+#    bang cach set SWAGGER_ENABLED=true trong .env neu can debug) ──
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
+spring:
+  jpa:
+    # Khong log SQL ra console/file o prod (du .env quen set JPA_SHOW_SQL)
+    show-sql: ${JPA_SHOW_SQL:false}
+
+# ── ACTUATOR — mac dinh chi expose "health", khong lo "info" ────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${ACTUATOR_ENDPOINTS:health}
+
+# ── LOGGING — mac dinh giam nhieu, van override duoc qua .env ───
+logging:
+  level:
+    com.app.nino: ${LOG_LEVEL_APP:INFO}
