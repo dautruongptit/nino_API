@@ -1,5 +1,6 @@
 package com.app.nino.service;
 
+import com.app.nino.exception.BadRequestException;
 import com.app.nino.model.dto.request.CreateRelativeRequest;
 import com.app.nino.model.dto.response.RelativeDetailResponse;
 import com.app.nino.model.entity.Event;
@@ -23,18 +24,14 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Ngày sinh (Relative.dateOfBirth) và Event "Sinh nhật" liên kết phải luôn
- * khớp nhau — xem thiết kế đã duyệt: "2 trường này là 1". Các test dưới đây
- * phủ chiều Relative -> Event (create/update/xoá ngày sinh).
+ * Ngày sinh tách 3 phần (birthMonth/birthDay/birthYear — xem
+ * Relative.java) và Event "Sinh nhật" liên kết phải luôn khớp nhau. Không
+ * còn giá trị năm đại diện nào (birthYear null = thực sự không rõ năm).
  */
 @ExtendWith(MockitoExtension.class)
 class RelativeServiceTest {
@@ -61,40 +58,38 @@ class RelativeServiceTest {
         });
     }
 
-    private CreateRelativeRequest baseRequest(LocalDate dob) {
-        return baseRequest(dob, null);
-    }
-
-    private CreateRelativeRequest baseRequest(LocalDate dob, Boolean dateOfBirthYearKnown) {
+    private CreateRelativeRequest baseRequest(Integer month, Integer day, Integer year) {
         CreateRelativeRequest req = new CreateRelativeRequest();
         req.setName("Mẹ");
         req.setGroupType("ME");
-        req.setDateOfBirth(dob);
-        req.setDateOfBirthYearKnown(dateOfBirthYearKnown);
+        req.setBirthMonth(month);
+        req.setBirthDay(day);
+        req.setBirthYear(year);
         return req;
+    }
+
+    private CreateRelativeRequest baseRequestNoBirthday() {
+        return baseRequest(null, null, null);
     }
 
     // ── CREATE ──────────────────────────────────────────────────────────
 
     @Test
-    void create_withDateOfBirth_createsLinkedBirthdayEvent() {
+    void create_withKnownBirthYear_createsLinkedBirthdayEvent() {
         // event_date của Event Sinh nhật (recurrence YEARLY) là NGÀY LẦN TỚI
-        // sắp diễn ra (năm nay/năm sau) — không phải gán thẳng dateOfBirth —
+        // sắp diễn ra (năm nay/năm sau) — không phải gán thẳng birthYear —
         // vì backend không có scheduler roll-forward năm cho YEARLY thường
         // (khác LunarRecurrenceScheduler dành cho âm lịch), và
-        // EventService.toResponse tính daysUntil = hiệu số ngày thô. Gán
-        // thẳng dateOfBirth (năm sinh thật) sẽ khiến Event mới tạo luôn có
-        // daysUntil âm khổng lồ -> hiện "ĐÃ QUA" ngay khi vừa tạo.
-        LocalDate dob = LocalDate.of(1970, 5, 20);
+        // EventService.toResponse tính daysUntil = hiệu số ngày thô.
         when(categoryRepo.findByCode("SINH_NHAT")).thenReturn(Optional.of(birthdayCategory));
 
-        service.create(1L, baseRequest(dob));
+        service.create(1L, baseRequest(5, 20, 1970));
 
         ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
         verify(eventRepo).save(captor.capture());
         Event saved = captor.getValue();
         assertEquals("SINH_NHAT", saved.getCategory().getCode());
-        assertEquals(RelativeService.nextBirthdayOccurrence(dob, LocalDate.now()), saved.getEventDate());
+        assertEquals(RelativeService.nextBirthdayOccurrence(5, 20, LocalDate.now()), saved.getEventDate());
         assertEquals(50L, saved.getRelative().getId());
         assertEquals(Event.RecurrenceType.YEARLY, saved.getRecurrenceType());
         verify(relativeRepo).incrementEventCount(50L);
@@ -102,48 +97,69 @@ class RelativeServiceTest {
     }
 
     @Test
-    void create_withoutDateOfBirth_doesNotCreateBirthdayEvent() {
-        service.create(1L, baseRequest(null));
+    void create_withUnknownBirthYear_stillCreatesLinkedBirthdayEvent() {
+        // birthYear null (không rõ năm) — vẫn phải tạo Event Sinh nhật bình
+        // thường, vì chỉ tháng/ngày mới cần cho việc đếm ngược.
+        when(categoryRepo.findByCode("SINH_NHAT")).thenReturn(Optional.of(birthdayCategory));
+
+        service.create(1L, baseRequest(10, 10, null));
+
+        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        verify(eventRepo).save(captor.capture());
+        assertEquals(RelativeService.nextBirthdayOccurrence(10, 10, LocalDate.now()), captor.getValue().getEventDate());
+    }
+
+    @Test
+    void create_withoutBirthday_doesNotCreateBirthdayEvent() {
+        service.create(1L, baseRequestNoBirthday());
 
         verify(eventRepo, never()).save(any());
         verifyNoInteractions(categoryRepo);
     }
 
+    @Test
+    void create_withBirthDayButNoMonth_throwsBadRequest() {
+        assertThrows(BadRequestException.class, () -> service.create(1L, baseRequest(null, 20, null)));
+    }
+
+    @Test
+    void create_withBirthYearButNoMonthDay_throwsBadRequest() {
+        assertThrows(BadRequestException.class, () -> service.create(1L, baseRequest(null, null, 1970)));
+    }
+
     // ── UPDATE ──────────────────────────────────────────────────────────
 
     @Test
-    void update_addingDateOfBirthWhenNoneExisted_createsBirthdayEvent() {
-        LocalDate dob = LocalDate.of(1970, 5, 20);
+    void update_addingBirthdayWhenNoneExisted_createsBirthdayEvent() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(null).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.empty());
         when(categoryRepo.findByCode("SINH_NHAT")).thenReturn(Optional.of(birthdayCategory));
 
-        service.update(50L, 1L, baseRequest(dob));
+        service.update(50L, 1L, baseRequest(5, 20, 1970));
 
         ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
         verify(eventRepo).save(captor.capture());
-        assertEquals(RelativeService.nextBirthdayOccurrence(dob, LocalDate.now()), captor.getValue().getEventDate());
+        assertEquals(RelativeService.nextBirthdayOccurrence(5, 20, LocalDate.now()), captor.getValue().getEventDate());
     }
 
     @Test
-    void update_changingDateOfBirth_updatesExistingBirthdayEventInPlace() {
-        LocalDate oldDob = LocalDate.of(1970, 5, 20);
-        LocalDate newDob = LocalDate.of(1970, 6, 21);
+    void update_changingBirthMonthDay_updatesExistingBirthdayEventInPlace() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(oldDob).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
         // Event đang đúng chuẩn theo ngày sinh CŨ (ngày lần tới, không phải năm sinh thật).
         Event linkedEvent = Event.builder().id(77L).category(birthdayCategory)
-            .eventDate(RelativeService.nextBirthdayOccurrence(oldDob, LocalDate.now())).isActive(true).build();
+            .eventDate(RelativeService.nextBirthdayOccurrence(5, 20, LocalDate.now())).isActive(true).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.of(linkedEvent));
 
-        service.update(50L, 1L, baseRequest(newDob));
+        service.update(50L, 1L, baseRequest(6, 21, 1970));
 
-        assertEquals(RelativeService.nextBirthdayOccurrence(newDob, LocalDate.now()), linkedEvent.getEventDate());
+        assertEquals(RelativeService.nextBirthdayOccurrence(6, 21, LocalDate.now()), linkedEvent.getEventDate());
         verify(eventRepo).save(linkedEvent);
         // Không tạo Event mới — chỉ có 1 lần save cho đúng event đã có sẵn.
         verify(eventRepo, times(1)).save(any());
@@ -151,33 +167,52 @@ class RelativeServiceTest {
     }
 
     @Test
-    void update_dateOfBirthUnchanged_doesNotTouchLinkedBirthdayEvent() {
-        LocalDate dob = LocalDate.of(1970, 5, 20);
+    void update_birthMonthDayUnchanged_doesNotTouchLinkedBirthdayEvent() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(dob).build();
-        // Event đã ở đúng ngày lần tới ứng với dob hiện tại -> không phải sửa lại.
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
+        // Event đã ở đúng ngày lần tới ứng với birthday hiện tại -> không phải sửa lại.
         Event linkedEvent = Event.builder().id(77L).category(birthdayCategory)
-            .eventDate(RelativeService.nextBirthdayOccurrence(dob, LocalDate.now())).isActive(true).build();
+            .eventDate(RelativeService.nextBirthdayOccurrence(5, 20, LocalDate.now())).isActive(true).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.of(linkedEvent));
 
-        service.update(50L, 1L, baseRequest(dob));
+        service.update(50L, 1L, baseRequest(5, 20, 1970));
 
         verify(eventRepo, never()).save(any());
     }
 
     @Test
-    void update_clearingDateOfBirth_deactivatesLinkedBirthdayEvent() {
+    void update_onlyBirthYearChanges_doesNotTouchLinkedBirthdayEvent() {
+        // Sửa/bổ sung birthYear (VD từ không rõ -> biết năm) không đổi ngày
+        // lần tới -> Event Sinh nhật không cần đụng vào.
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(LocalDate.of(1970, 5, 20)).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(null).build();
         Event linkedEvent = Event.builder().id(77L).category(birthdayCategory)
-            .eventDate(LocalDate.of(1970, 5, 20)).isActive(true).build();
+            .eventDate(RelativeService.nextBirthdayOccurrence(5, 20, LocalDate.now())).isActive(true).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.of(linkedEvent));
 
-        service.update(50L, 1L, baseRequest(null));
+        service.update(50L, 1L, baseRequest(5, 20, 1970));
+
+        verify(eventRepo, never()).save(any());
+    }
+
+    @Test
+    void update_clearingBirthday_deactivatesLinkedBirthdayEvent() {
+        Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
+        Event linkedEvent = Event.builder().id(77L).category(birthdayCategory)
+            .eventDate(LocalDate.of(2026, 5, 20)).isActive(true).build();
+        when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
+        when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
+            .thenReturn(Optional.of(linkedEvent));
+
+        service.update(50L, 1L, baseRequestNoBirthday());
 
         assertFalse(linkedEvent.getIsActive());
         verify(eventRepo).save(linkedEvent);
@@ -190,24 +225,28 @@ class RelativeServiceTest {
     @Test
     void syncDateOfBirthFromEvent_keepsBirthYear_onlyAdoptsMonthAndDayFromEvent() {
         // eventDate mang năm "lần tới" (2027), KHÔNG phải năm sinh thật —
-        // sửa Event Sinh nhật chỉ đổi tháng/ngày sinh, giữ nguyên năm sinh
+        // sửa Event Sinh nhật chỉ đổi tháng/ngày sinh, giữ nguyên birthYear
         // 1970 vốn dùng để tính tuổi (RelativeDetailResponse.age).
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(LocalDate.of(1970, 5, 20)).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
 
         service.syncDateOfBirthFromEvent(50L, 1L, LocalDate.of(2027, 6, 21));
 
-        assertEquals(LocalDate.of(1970, 6, 21), existing.getDateOfBirth());
+        assertEquals(6, existing.getBirthMonth());
+        assertEquals(21, existing.getBirthDay());
+        assertEquals(1970, existing.getBirthYear());
         verify(relativeRepo).save(existing);
     }
 
     @Test
     void syncDateOfBirthFromEvent_whenMonthDayUnchanged_doesNotSave() {
-        // Năm trên Event khác năm sinh là chuyện BÌNH THƯỜNG (event luôn
+        // Năm trên Event khác birthYear là chuyện BÌNH THƯỜNG (event luôn
         // mang năm lần tới) -> không được coi là "có thay đổi".
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(LocalDate.of(1970, 5, 20)).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
 
         service.syncDateOfBirthFromEvent(50L, 1L, LocalDate.of(2026, 5, 20));
@@ -216,69 +255,68 @@ class RelativeServiceTest {
     }
 
     @Test
-    void syncDateOfBirthFromEvent_whenNoDateOfBirthYet_adoptsEventDateAsIs() {
-        // Trường hợp phòng hờ: relative chưa từng có dateOfBirth (không nên
-        // xảy ra nếu đã có Event liên kết, nhưng cứ xử lý an toàn) -> lấy
-        // nguyên eventDate làm dateOfBirth thay vì NPE khi đọc year().
+    void syncDateOfBirthFromEvent_keepsBirthYearNull_whenUnknown() {
+        // Người thân đang KHÔNG rõ năm sinh (birthYear null) — sửa Event chỉ
+        // đổi tháng/ngày, birthYear vẫn giữ null (không tự điền năm nào).
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(null).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(null).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
 
         service.syncDateOfBirthFromEvent(50L, 1L, LocalDate.of(2027, 6, 21));
 
-        assertEquals(LocalDate.of(2027, 6, 21), existing.getDateOfBirth());
+        assertEquals(6, existing.getBirthMonth());
+        assertEquals(21, existing.getBirthDay());
+        assertNull(existing.getBirthYear());
         verify(relativeRepo).save(existing);
     }
 
-    // ── KHÔNG NHỚ NĂM SINH — dateOfBirthYearKnown ──────────────────────────
-    // Người dùng có thể không nhớ chính xác năm sinh của người thân. Field
-    // này cho phép dateOfBirth chỉ đáng tin ở phần Tháng/Ngày (năm là giá
-    // trị đại diện mobile tự điền, VD 1900) — không ảnh hưởng tới việc tính
-    // "sinh nhật lần tới" (nextBirthdayOccurrence chỉ dùng tháng/ngày), chỉ
-    // ảnh hưởng tới tuổi hiển thị ở RelativeDetailResponse.
+    // ── KHÔNG RÕ NĂM SINH — birthYear = null ────────────────────────────────
 
     @Test
-    void create_withDateOfBirthYearKnownOmitted_defaultsToTrue() {
+    void create_withBirthYear_persistsIt() {
         when(categoryRepo.findByCode("SINH_NHAT")).thenReturn(Optional.of(birthdayCategory));
 
-        service.create(1L, baseRequest(LocalDate.of(1900, 5, 20), null));
+        service.create(1L, baseRequest(5, 20, 1970));
 
         ArgumentCaptor<Relative> captor = ArgumentCaptor.forClass(Relative.class);
         verify(relativeRepo, atLeastOnce()).save(captor.capture());
-        assertTrue(captor.getValue().getDateOfBirthYearKnown());
+        assertEquals(1970, captor.getValue().getBirthYear());
     }
 
     @Test
-    void create_withDateOfBirthYearKnownFalse_persistsFalse() {
+    void create_withoutBirthYear_persistsNull() {
         when(categoryRepo.findByCode("SINH_NHAT")).thenReturn(Optional.of(birthdayCategory));
 
-        service.create(1L, baseRequest(LocalDate.of(1900, 5, 20), false));
+        service.create(1L, baseRequest(10, 10, null));
 
         ArgumentCaptor<Relative> captor = ArgumentCaptor.forClass(Relative.class);
         verify(relativeRepo, atLeastOnce()).save(captor.capture());
-        assertFalse(captor.getValue().getDateOfBirthYearKnown());
+        assertNull(captor.getValue().getBirthYear());
+        assertEquals(10, captor.getValue().getBirthMonth());
+        assertEquals(10, captor.getValue().getBirthDay());
     }
 
     @Test
-    void update_changingDateOfBirthYearKnownToFalse_persistsFalse() {
+    void update_clearingBirthYear_persistsNull() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(LocalDate.of(1970, 5, 20))
-            .dateOfBirthYearKnown(true).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.empty());
         when(categoryRepo.findByCode("SINH_NHAT")).thenReturn(Optional.of(birthdayCategory));
 
-        service.update(50L, 1L, baseRequest(LocalDate.of(1900, 5, 20), false));
+        service.update(50L, 1L, baseRequest(5, 20, null));
 
-        assertFalse(existing.getDateOfBirthYearKnown());
+        assertNull(existing.getBirthYear());
     }
 
     @Test
     void getDetail_whenYearUnknown_returnsNullAge() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
             .name("Mẹ").groupType(Relative.GroupType.ME)
-            .dateOfBirth(LocalDate.of(1900, 5, 20)).dateOfBirthYearKnown(false).build();
+            .birthMonth(5).birthDay(20).birthYear(null).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findByRelativeIdAndIsActiveTrueOrderByEventDateAsc(50L)).thenReturn(List.of());
 
@@ -289,9 +327,12 @@ class RelativeServiceTest {
 
     @Test
     void getDetail_whenYearKnown_returnsRealAge() {
+        LocalDate birthday30YearsAgo = LocalDate.now().minusYears(30);
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
             .name("Mẹ").groupType(Relative.GroupType.ME)
-            .dateOfBirth(LocalDate.now().minusYears(30)).dateOfBirthYearKnown(true).build();
+            .birthMonth(birthday30YearsAgo.getMonthValue())
+            .birthDay(birthday30YearsAgo.getDayOfMonth())
+            .birthYear(birthday30YearsAgo.getYear()).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findByRelativeIdAndIsActiveTrueOrderByEventDateAsc(50L)).thenReturn(List.of());
 
@@ -300,14 +341,27 @@ class RelativeServiceTest {
         assertEquals(30, response.getAge());
     }
 
+    @Test
+    void getDetail_withoutBirthday_returnsNullAge() {
+        Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
+            .name("Mẹ").groupType(Relative.GroupType.ME).build();
+        when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
+        when(eventRepo.findByRelativeIdAndIsActiveTrueOrderByEventDateAsc(50L)).thenReturn(List.of());
+
+        RelativeDetailResponse response = service.getDetail(50L, 1L);
+
+        assertNull(response.getAge());
+    }
+
     // ── DELETE — Event Sinh nhật liên kết không được mồ côi ────────────────
 
     @Test
     void delete_deactivatesLinkedBirthdayEvent() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(LocalDate.of(1970, 5, 20)).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME)
+            .birthMonth(5).birthDay(20).birthYear(1970).build();
         Event linkedEvent = Event.builder().id(77L).category(birthdayCategory)
-            .eventDate(LocalDate.of(1970, 5, 20)).isActive(true).build();
+            .eventDate(LocalDate.of(2026, 5, 20)).isActive(true).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.of(linkedEvent));
@@ -319,44 +373,10 @@ class RelativeServiceTest {
         verify(relativeRepo).delete(existing);
     }
 
-    // ── nextBirthdayOccurrence — quy tắc "ngày lần tới" dùng cho eventDate ──
-
-    @Test
-    void nextBirthdayOccurrence_beforeThisYearsBirthday_returnsThisYear() {
-        LocalDate dob = LocalDate.of(1970, 12, 25);
-        LocalDate today = LocalDate.of(2026, 9, 6);
-
-        assertEquals(LocalDate.of(2026, 12, 25), RelativeService.nextBirthdayOccurrence(dob, today));
-    }
-
-    @Test
-    void nextBirthdayOccurrence_afterThisYearsBirthday_rollsToNextYear() {
-        LocalDate dob = LocalDate.of(1970, 5, 20);
-        LocalDate today = LocalDate.of(2026, 9, 6);
-
-        assertEquals(LocalDate.of(2027, 5, 20), RelativeService.nextBirthdayOccurrence(dob, today));
-    }
-
-    @Test
-    void nextBirthdayOccurrence_todayIsTheBirthday_returnsToday() {
-        LocalDate dob = LocalDate.of(1970, 9, 6);
-        LocalDate today = LocalDate.of(2026, 9, 6);
-
-        assertEquals(today, RelativeService.nextBirthdayOccurrence(dob, today));
-    }
-
-    @Test
-    void nextBirthdayOccurrence_leapDayBirthdayInNonLeapYear_clampsToFeb28() {
-        LocalDate dob = LocalDate.of(1972, 2, 29);
-        LocalDate today = LocalDate.of(2026, 9, 6); // 2027 không nhuận
-
-        assertEquals(LocalDate.of(2027, 2, 28), RelativeService.nextBirthdayOccurrence(dob, today));
-    }
-
     @Test
     void delete_withoutLinkedBirthdayEvent_doesNotTouchEventRepo() {
         Relative existing = Relative.builder().id(50L).user(User.builder().id(1L).build())
-            .name("Mẹ").groupType(Relative.GroupType.ME).dateOfBirth(null).build();
+            .name("Mẹ").groupType(Relative.GroupType.ME).build();
         when(relativeRepo.findByIdAndUserId(50L, 1L)).thenReturn(Optional.of(existing));
         when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(50L, "SINH_NHAT"))
             .thenReturn(Optional.empty());
@@ -365,5 +385,35 @@ class RelativeServiceTest {
 
         verify(eventRepo, never()).save(any());
         verify(relativeRepo).delete(existing);
+    }
+
+    // ── nextBirthdayOccurrence — quy tắc "ngày lần tới" dùng cho eventDate ──
+
+    @Test
+    void nextBirthdayOccurrence_beforeThisYearsBirthday_returnsThisYear() {
+        LocalDate today = LocalDate.of(2026, 9, 6);
+
+        assertEquals(LocalDate.of(2026, 12, 25), RelativeService.nextBirthdayOccurrence(12, 25, today));
+    }
+
+    @Test
+    void nextBirthdayOccurrence_afterThisYearsBirthday_rollsToNextYear() {
+        LocalDate today = LocalDate.of(2026, 9, 6);
+
+        assertEquals(LocalDate.of(2027, 5, 20), RelativeService.nextBirthdayOccurrence(5, 20, today));
+    }
+
+    @Test
+    void nextBirthdayOccurrence_todayIsTheBirthday_returnsToday() {
+        LocalDate today = LocalDate.of(2026, 9, 6);
+
+        assertEquals(today, RelativeService.nextBirthdayOccurrence(9, 6, today));
+    }
+
+    @Test
+    void nextBirthdayOccurrence_leapDayBirthdayInNonLeapYear_clampsToFeb28() {
+        LocalDate today = LocalDate.of(2026, 9, 6); // 2027 không nhuận
+
+        assertEquals(LocalDate.of(2027, 2, 28), RelativeService.nextBirthdayOccurrence(2, 29, today));
     }
 }

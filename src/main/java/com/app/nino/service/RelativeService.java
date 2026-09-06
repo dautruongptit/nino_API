@@ -1,5 +1,6 @@
 package com.app.nino.service;
 
+import com.app.nino.exception.BadRequestException;
 import com.app.nino.exception.ResourceNotFoundException;
 import com.app.nino.model.dto.request.CreateRelativeRequest;
 import com.app.nino.model.dto.response.GroupSummaryResponse;
@@ -72,9 +73,11 @@ public class RelativeService {
         Relative relative = relativeRepo.findByIdAndUserId(id, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Relative", id));
 
-        int age = (relative.getDateOfBirth() != null && Boolean.TRUE.equals(relative.getDateOfBirthYearKnown()))
-            ? Period.between(relative.getDateOfBirth(), LocalDate.now()).getYears() : -1;
-        long daysToBirthday = RelativeResponse.calcDaysToBirthday(relative.getDateOfBirth());
+        int age = hasFullBirthDate(relative)
+            ? Period.between(LocalDate.of(relative.getBirthYear(), relative.getBirthMonth(), relative.getBirthDay()),
+                LocalDate.now()).getYears()
+            : -1;
+        long daysToBirthday = RelativeResponse.calcDaysToBirthday(relative.getBirthMonth(), relative.getBirthDay());
 
         return RelativeDetailResponse.from(relative, age, daysToBirthday,
             eventRepo.findByRelativeIdAndIsActiveTrueOrderByEventDateAsc(id));
@@ -88,14 +91,15 @@ public class RelativeService {
     })
     @Transactional
     public RelativeResponse create(Long userId, CreateRelativeRequest req) {
+        validateBirthFields(req);
         Relative relative = Relative.builder()
             .name(req.getName())
             .nickname(req.getNickname())
             .groupType(Relative.GroupType.valueOf(req.getGroupType()))
             .gender(req.getGender() != null ? Relative.Gender.valueOf(req.getGender()) : null)
-            .dateOfBirth(req.getDateOfBirth())
-            // null (client cũ chưa gửi field này) -> coi như đã biết năm.
-            .dateOfBirthYearKnown(req.getDateOfBirthYearKnown() == null || req.getDateOfBirthYearKnown())
+            .birthMonth(req.getBirthMonth())
+            .birthDay(req.getBirthDay())
+            .birthYear(req.getBirthYear())
             .location(req.getLocation())
             .heightCm(req.getHeightCm())
             .weightKg(req.getWeightKg())
@@ -123,6 +127,7 @@ public class RelativeService {
     })
     @Transactional
     public RelativeResponse update(Long id, Long userId, CreateRelativeRequest req) {
+        validateBirthFields(req);
         Relative relative = relativeRepo.findByIdAndUserId(id, userId)
             .orElseThrow(() -> new ResourceNotFoundException("Relative", id));
 
@@ -130,8 +135,9 @@ public class RelativeService {
         relative.setNickname(req.getNickname());
         relative.setGroupType(Relative.GroupType.valueOf(req.getGroupType()));
         relative.setGender(req.getGender() != null ? Relative.Gender.valueOf(req.getGender()) : null);
-        relative.setDateOfBirth(req.getDateOfBirth());
-        relative.setDateOfBirthYearKnown(req.getDateOfBirthYearKnown() == null || req.getDateOfBirthYearKnown());
+        relative.setBirthMonth(req.getBirthMonth());
+        relative.setBirthDay(req.getBirthDay());
+        relative.setBirthYear(req.getBirthYear());
         relative.setLocation(req.getLocation());
         relative.setHeightCm(req.getHeightCm());
         relative.setWeightKg(req.getWeightKg());
@@ -159,19 +165,19 @@ public class RelativeService {
     public void syncDateOfBirthFromEvent(Long relativeId, Long userId, LocalDate eventDate) {
         relativeRepo.findByIdAndUserId(relativeId, userId).ifPresent(relative -> {
             // eventDate mang nam "lan toi" (xem nextBirthdayOccurrence), KHONG
-            // phai nam sinh that -> chi lay thang/ngay, giu nguyen nam sinh
-            // dang co (dung de tinh tuoi o RelativeDetailResponse.age). Neu
-            // relative chua tung co dateOfBirth (khong nen xay ra, phong hoa)
-            // thi lay nguyen eventDate.
-            LocalDate currentDob = relative.getDateOfBirth();
-            LocalDate newDob = currentDob == null
-                ? eventDate
-                : safeDate(currentDob.getYear(), eventDate.getMonthValue(), eventDate.getDayOfMonth());
-            if (!newDob.equals(currentDob)) {
-                relative.setDateOfBirth(newDob);
+            // phai nam sinh that -> chi lay thang/ngay, giu nguyen birthYear
+            // dang co (co the la null neu tu truoc gio khong ro nam - khong
+            // sao ca, khong con can gia tri dai dien nao nua).
+            int month = eventDate.getMonthValue();
+            int day = eventDate.getDayOfMonth();
+            boolean changed = !java.util.Objects.equals(month, relative.getBirthMonth())
+                || !java.util.Objects.equals(day, relative.getBirthDay());
+            if (changed) {
+                relative.setBirthMonth(month);
+                relative.setBirthDay(day);
                 relativeRepo.save(relative);
-                log.info("[Relative] Dong bo ngay sinh tu Event Sinh nhat: relativeId={} newDateOfBirth={}",
-                    relativeId, newDob);
+                log.info("[Relative] Dong bo ngay sinh tu Event Sinh nhat: relativeId={} newMonth={} newDay={}",
+                    relativeId, month, day);
             }
         });
     }
@@ -206,23 +212,25 @@ public class RelativeService {
 
     /**
      * Đồng bộ Event "Sinh nhật" liên kết với [relative] theo đúng
-     * dateOfBirth hiện tại — gọi sau khi create/update Relative. Mỗi
-     * người thân có tối đa 1 Event loại này:
-     * - Chưa có dateOfBirth: không làm gì (chưa từng có/không cần Event).
-     * - Có dateOfBirth, chưa có Event: tạo mới (lặp hàng năm YEARLY).
-     * - Có dateOfBirth, đã có Event: chỉ cập nhật eventDate, giữ nguyên
-     *   title/giờ/nhắc nhở người dùng có thể đã tự sửa.
-     * - dateOfBirth bị xoá (null), đã có Event: vô hiệu hoá (soft-delete)
+     * birthMonth/birthDay hiện tại (birthYear không liên quan) — gọi sau
+     * khi create/update Relative. Mỗi người thân có tối đa 1 Event loại
+     * này:
+     * - Chưa có birthMonth/birthDay: không làm gì (chưa từng có/không cần Event).
+     * - Có birthMonth/birthDay, chưa có Event: tạo mới (lặp hàng năm YEARLY).
+     * - Có birthMonth/birthDay, đã có Event: chỉ cập nhật eventDate, giữ
+     *   nguyên title/giờ/nhắc nhở người dùng có thể đã tự sửa.
+     * - birthMonth/birthDay bị xoá, đã có Event: vô hiệu hoá (soft-delete)
      *   Event đó, giống hệt EventService.delete().
      * Ghi thẳng qua eventRepo (không gọi EventService.create/update) để
      * tránh gọi vòng lại sang RelativeService.syncDateOfBirthFromEvent.
      */
     private void syncBirthdayEvent(Relative relative) {
-        LocalDate dob = relative.getDateOfBirth();
+        Integer month = relative.getBirthMonth();
+        Integer day = relative.getBirthDay();
         Optional<Event> existing = eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(
             relative.getId(), BIRTHDAY_CATEGORY_CODE);
 
-        if (dob == null) {
+        if (month == null || day == null) {
             existing.ifPresent(event -> {
                 event.setIsActive(false);
                 eventRepo.save(event);
@@ -235,13 +243,14 @@ public class RelativeService {
         }
 
         // event_date cua Event Sinh nhat (recurrence YEARLY) la NGAY LAN TOI
-        // sap dien ra (nam nay/nam sau) — KHONG gan thang dateOfBirth (nam
-        // sinh that). Backend khong co scheduler roll-forward nam cho
+        // sap dien ra (nam nay/nam sau) — KHONG dung birthYear (co the null
+        // neu khong ro nam, va du co cung la nam sinh that chu khong phai
+        // "lan toi"). Backend khong co scheduler roll-forward nam cho
         // YEARLY thuong (khac LunarRecurrenceScheduler danh cho am lich),
         // va EventService.toResponse tinh daysUntil = hieu so ngay tho ->
         // gan nam sinh that se khien Event moi tao luon "DA QUA" ngay lap
         // tuc. Quy uoc nay khop du lieu seed co san (V10_...sql).
-        LocalDate nextOccurrence = nextBirthdayOccurrence(dob, LocalDate.now());
+        LocalDate nextOccurrence = nextBirthdayOccurrence(month, day, LocalDate.now());
 
         if (existing.isPresent()) {
             Event event = existing.get();
@@ -273,21 +282,38 @@ public class RelativeService {
     }
 
     /**
-     * Ngày sinh nhật lần tới tính từ hôm nay — cùng tháng/ngày với [dob],
-     * năm là năm nay nếu chưa qua, năm sau nếu đã qua. Dùng cho eventDate
-     * của Event Sinh nhật (xem giải thích ở syncBirthdayEvent). Ngày
-     * 29/2 ở năm không nhuận được kẹp về 28/2 để tránh crash
-     * (LocalDate.withYear ném DateTimeException với năm không nhuận).
+     * Ngày sinh nhật lần tới tính từ hôm nay — cùng [month]/[day], năm là
+     * năm nay nếu chưa qua, năm sau nếu đã qua. Dùng cho eventDate của
+     * Event Sinh nhật (xem giải thích ở syncBirthdayEvent) và
+     * RelativeResponse.calcDaysToBirthday — public vì dùng ở cả 2 nơi.
+     * Ngày 29/2 ở năm không nhuận được kẹp về 28/2 để tránh crash
+     * (LocalDate.of ném DateTimeException với năm không nhuận).
      */
-    static LocalDate nextBirthdayOccurrence(LocalDate dob, LocalDate today) {
-        LocalDate next = safeDate(today.getYear(), dob.getMonthValue(), dob.getDayOfMonth());
+    public static LocalDate nextBirthdayOccurrence(int month, int day, LocalDate today) {
+        LocalDate next = safeDate(today.getYear(), month, day);
         // Hôm nay đúng là sinh nhật -> vẫn tính là "lần tới" (0 ngày), KHÔNG
         // nhảy sang năm sau — khớp EventListSort._isPast (daysUntil == 0
         // không tính là đã qua) và chuỗi "Sinh nhật hôm nay! 🎂" ở mobile.
         if (next.isBefore(today)) {
-            next = safeDate(today.getYear() + 1, dob.getMonthValue(), dob.getDayOfMonth());
+            next = safeDate(today.getYear() + 1, month, day);
         }
         return next;
+    }
+
+    private boolean hasFullBirthDate(Relative relative) {
+        return relative.getBirthYear() != null && relative.getBirthMonth() != null && relative.getBirthDay() != null;
+    }
+
+    /** birthMonth/birthDay phải cùng có hoặc cùng không — 1 mình 1 cái là dữ liệu vô nghĩa. birthYear không có ý nghĩa nếu thiếu cả 2 cái kia. */
+    private void validateBirthFields(CreateRelativeRequest req) {
+        boolean hasMonth = req.getBirthMonth() != null;
+        boolean hasDay = req.getBirthDay() != null;
+        if (hasMonth != hasDay) {
+            throw new BadRequestException("birthMonth va birthDay phai cung co hoac cung khong co");
+        }
+        if (req.getBirthYear() != null && !hasMonth) {
+            throw new BadRequestException("birthYear khong co y nghia neu chua co birthMonth/birthDay");
+        }
     }
 
     private static LocalDate safeDate(int year, int month, int day) {

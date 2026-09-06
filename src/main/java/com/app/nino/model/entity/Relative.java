@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -38,20 +37,24 @@ public class Relative {
     @Column(name = "gender", length = 10)
     private Gender gender;
 
-    @Column(name = "date_of_birth")
-    private LocalDate dateOfBirth;
-
     /**
-     * false = phần NĂM của dateOfBirth chỉ là giá trị đại diện (mobile gửi
-     * 1900) do người dùng không nhớ rõ năm sinh — chỉ Tháng/Ngày đáng tin,
-     * không dùng để tính tuổi (RelativeService.getDetail). Không ảnh hưởng
-     * việc tính "sinh nhật lần tới" (RelativeService.nextBirthdayOccurrence
-     * vốn chỉ dùng tháng/ngày). true = năm sinh thật, dữ liệu cũ mặc định
-     * true (V23_20260906_add_relative_dob_year_known.sql).
+     * Ngày sinh tách riêng 3 phần thay vì 1 cột DATE — vì năm sinh có thể
+     * KHÔNG biết (người dùng không nhớ rõ năm sinh người thân), và tháng/
+     * ngày là đủ để tính sinh nhật lần tới (RelativeService
+     * .nextBirthdayOccurrence). birthMonth/birthDay cùng null = chưa có
+     * ngày sinh; birthYear null (trong khi 2 cái kia có) = biết ngày sinh
+     * nhưng KHÔNG rõ năm — không có giá trị đại diện/giả nào được lưu.
+     * (V24_20260906_split_relative_birth_date.sql thay cho date_of_birth +
+     * date_of_birth_year_known cũ.)
      */
-    @Column(name = "date_of_birth_year_known", nullable = false)
-    @Builder.Default
-    private Boolean dateOfBirthYearKnown = true;
+    @Column(name = "birth_month")
+    private Integer birthMonth;
+
+    @Column(name = "birth_day")
+    private Integer birthDay;
+
+    @Column(name = "birth_year")
+    private Integer birthYear;
 
     @Column(name = "location", length = 200)
     private String location;
