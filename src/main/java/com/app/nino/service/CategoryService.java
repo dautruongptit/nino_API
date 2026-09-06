@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.app.nino.util.VietnameseUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -50,9 +52,7 @@ public class CategoryService {
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("Nguoi dung khong ton tai"));
 
-        if (categoryRepo.existsByDisplayNameAndUserId(req.getDisplayName(), userId)) {
-            throw new BadRequestException("Da ton tai danh muc voi ten '" + req.getDisplayName() + "'");
-        }
+        checkDuplicateName(req.getDisplayName(), userId, null);
 
         String code = "CUSTOM_" + userId + "_" + System.currentTimeMillis();
 
@@ -77,11 +77,7 @@ public class CategoryService {
     public EventCategoryResponse update(Long id, Long userId, CreateCategoryRequest req) {
         EventCategory category = findOwnCustomCategory(id, userId);
 
-        // Check duplicate name (skip if name unchanged)
-        if (!category.getDisplayName().equals(req.getDisplayName())
-                && categoryRepo.existsByDisplayNameAndUserId(req.getDisplayName(), userId)) {
-            throw new BadRequestException("Da ton tai danh muc voi ten '" + req.getDisplayName() + "'");
-        }
+        checkDuplicateName(req.getDisplayName(), userId, id);
 
         category.setDisplayName(req.getDisplayName());
         category.setIcon(req.getIcon());
@@ -111,6 +107,23 @@ public class CategoryService {
     }
 
     // ── PRIVATE ─────────────────────────────────────────────────────────
+
+    /**
+     * Check trung ten danh muc — khong phan biet hoa/thuong, co dau/khong dau.
+     * So sanh voi TAT CA danh muc user nhin thay (he thong + custom cua user).
+     * VD: "Du lịch" = "du lich" = "DU LỊCH" = "du LICH" -> trung.
+     *
+     * @param excludeId ID category dang sua (bo qua chinh no), null khi tao moi.
+     */
+    private void checkDuplicateName(String newName, Long userId, Long excludeId) {
+        String normalized = VietnameseUtils.normalize(newName);
+        boolean duplicate = categoryRepo.findAllVisibleByUserId(userId).stream()
+            .filter(c -> excludeId == null || !c.getId().equals(excludeId))
+            .anyMatch(c -> VietnameseUtils.normalize(c.getDisplayName()).equals(normalized));
+        if (duplicate) {
+            throw new BadRequestException("Da ton tai danh muc voi ten tuong tu '" + newName + "'");
+        }
+    }
 
     /** Find category by ID, verify it's non-system and owned by userId. */
     private EventCategory findOwnCustomCategory(Long id, Long userId) {
