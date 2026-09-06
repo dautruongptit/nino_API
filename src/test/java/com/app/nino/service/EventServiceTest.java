@@ -242,6 +242,46 @@ class EventServiceTest {
         verify(relativeService).syncDateOfBirthFromEvent(20L, 1L, LocalDate.of(1970, 6, 21));
     }
 
+    // ── CHỐNG TRÙNG EVENT SINH NHẬT — RelativeService.syncBirthdayEvent()
+    // đã tự sinh 1 Event "Sinh nhật" khi thêm ngày sinh cho người thân; nếu
+    // người dùng lại TỰ TAY tạo thêm 1 Event danh mục Sinh nhật cho ĐÚNG
+    // người thân đó qua màn "Tạo sự kiện", EventService.create() trước đây
+    // không kiểm tra gì cả -> insert thêm 1 Event tách biệt, dẫn tới 2 Event
+    // + 2 bộ nhắc nhở + 2 thông báo trùng lặp cho cùng 1 sinh nhật. ────────
+
+    @Test
+    void create_withBirthdayCategoryAndRelativeAlreadyHavingBirthdayEvent_updatesExistingInsteadOfDuplicating() {
+        User owner = User.builder().id(1L).build();
+        Relative relative = Relative.builder().id(20L).user(owner).groupType(Relative.GroupType.ME).build();
+        Event existingBirthdayEvent = Event.builder()
+                .id(40L).user(owner).relative(relative).category(birthdayCategory())
+                .eventDate(LocalDate.of(2026, 5, 20))
+                .reminders(new ArrayList<>())
+                .build();
+
+        when(relativeRepo.findByIdAndUserId(20L, 1L)).thenReturn(java.util.Optional.of(relative));
+        when(categoryRepo.findById(3L)).thenReturn(java.util.Optional.of(birthdayCategory()));
+        when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(20L, "SINH_NHAT"))
+                .thenReturn(java.util.Optional.of(existingBirthdayEvent));
+        when(eventRepo.findById(40L)).thenReturn(java.util.Optional.of(existingBirthdayEvent));
+
+        CreateEventRequest req = baseRequest(null);
+        req.setCategoryId(3L);
+        req.setRelativeId(20L);
+        req.setEventDate(LocalDate.of(2027, 5, 20));
+
+        service.create(1L, req);
+
+        // Chỉ 1 lần save duy nhất, nhắm thẳng vào Event đã có (id=40) — không
+        // insert Event mới.
+        verify(eventRepo, times(1)).save(any(Event.class));
+        verify(eventRepo).findById(40L);
+        assertEquals(LocalDate.of(2027, 5, 20), existingBirthdayEvent.getEventDate());
+        // Counter chỉ tăng khi thật sự tạo mới — event này không phải mới.
+        verify(userRepo, never()).incrementEventCount(any());
+        verify(relativeRepo, never()).incrementEventCount(any());
+    }
+
     @Test
     void update_changingNonBirthdayEvent_doesNotSyncRelative() {
         User owner = User.builder().id(1L).build();

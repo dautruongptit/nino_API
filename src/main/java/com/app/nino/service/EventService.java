@@ -97,6 +97,22 @@ public class EventService {
                             new ResourceNotFoundException("Nguoi than khong ton tai"));
         }
 
+        // Chống trùng Event "Sinh nhật": RelativeService.syncBirthdayEvent()
+        // đã tự sinh 1 Event loại này khi thêm/sửa ngày sinh cho người thân.
+        // Nếu người dùng lại tự tay tạo thêm 1 Event danh mục Sinh nhật cho
+        // ĐÚNG người thân đã có sẵn -> cập nhật event đã có thay vì insert
+        // thêm bản ghi mới (tránh 2 Event + 2 bộ nhắc nhở + 2 thông báo
+        // trùng lặp cho cùng 1 sinh nhật).
+        if (relative != null && BIRTHDAY_CATEGORY_CODE.equals(category.getCode())) {
+            var existingBirthdayEvent = eventRepo
+                    .findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(relative.getId(), BIRTHDAY_CATEGORY_CODE);
+            if (existingBirthdayEvent.isPresent()) {
+                log.info("[Event] Da co san Event Sinh nhat (id={}) cho relativeId={} -> cap nhat thay vi tao trung",
+                    existingBirthdayEvent.get().getId(), relative.getId());
+                return update(existingBirthdayEvent.get().getId(), userId, req);
+            }
+        }
+
         Event.RecurrenceType recurrenceType = resolveRecurrenceType(req.getRecurrenceType());
         validateRecurrenceFields(recurrenceType, req);
 
