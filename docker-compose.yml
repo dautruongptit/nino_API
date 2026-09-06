@@ -13,6 +13,9 @@ services:
       # true: DB prod da co schema toi V22 duoc apply thu cong truoc khi
       # dung Flyway -> baseline de khong chay lai V1-V22 (xem application.yml)
       FLYWAY_BASELINE:        "true"
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./data/logs:/app/logs
     restart: unless-stopped
     networks:
       - shared-network
