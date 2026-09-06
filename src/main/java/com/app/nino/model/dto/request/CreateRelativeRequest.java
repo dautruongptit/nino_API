@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 @Data
 public class CreateRelativeRequest {
@@ -19,7 +18,11 @@ public class CreateRelativeRequest {
 
     private String gender;      // MALE, FEMALE, OTHER
 
-    private LocalDate dateOfBirth;
+    // Ngày sinh tách 3 phần — xem Relative.birthMonth/birthDay/birthYear.
+    // birthYear null = không rõ năm sinh (không dùng giá trị đại diện nào).
+    private Integer birthMonth;
+    private Integer birthDay;
+    private Integer birthYear;
     private String location;
     private BigDecimal heightCm;
     private BigDecimal weightKg;

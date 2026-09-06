@@ -67,9 +67,17 @@ docker compose up --build -d
 
 Dùng `Dockerfile` (multi-stage: build bằng Maven → chạy bằng JRE Alpine, user non-root), nạp biến môi trường từ `.env`, kích hoạt `SPRING_PROFILES_ACTIVE=prod` → Spring Boot merge `application.yml` + `application-prod.yml`.
 
+## Database migration (Flyway)
+
+Schema DB được quản lý bằng **Flyway**, tự động chạy mỗi khi app start (không cần chạy tay file SQL nữa). File migration nằm ở `src/main/resources/db/migration/V{n}__{mo_ta}.sql`, đặt tên đúng convention Flyway (`V<số>__<mô_tả>.sql`) và được áp dụng tuần tự theo số phiên bản.
+
+- Thêm tính năng cần đổi schema → tạo file `V{n+1}__...sql` mới trong `db/migration/`, không sửa lại file cũ đã chạy.
+- DB đã tồn tại từ trước (tạo thủ công tới `V22`) nên `spring.flyway.baseline-on-migrate=true` (mặc định, override qua `FLYWAY_BASELINE`) — Flyway "nhận" các version ≤ `baseline-version` (mặc định `22`, override qua `FLYWAY_BASELINE_VERSION`) là đã áp dụng, chỉ tự chạy các file mới hơn. Với DB rỗng (môi trường mới), baseline không có tác dụng — Flyway tự chạy từ `V1`.
+- `spring.jpa.hibernate.ddl-auto=validate`: Hibernate chỉ kiểm tra entity khớp schema, không tự tạo/sửa bảng — mọi thay đổi schema đều phải đi qua file migration Flyway.
+
 ## Cấu hình cần chuẩn bị trước khi chạy
 
-- `.env` / `.env.dev`: DB (`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`), `JWT_SECRET`, `GOOGLE_CLIENT_ID`, Redis (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`)...
+- `.env` / `.env.dev`: DB (`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`), `JWT_SECRET`, `GOOGLE_CLIENT_ID`, Redis (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`), Flyway (`FLYWAY_BASELINE`, `FLYWAY_BASELINE_VERSION` — thường không cần đổi)...
 - `src/main/resources/firebase-service-account.json`: service account Firebase để gửi FCM push notification (**không commit** — đã có trong `.gitignore`).
 
 ## CORS

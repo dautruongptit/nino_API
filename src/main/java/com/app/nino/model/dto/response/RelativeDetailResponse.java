@@ -18,7 +18,10 @@ public class RelativeDetailResponse {
     private String nickname;
     private String groupType;
     private String gender;
-    private LocalDate dateOfBirth;
+    // Ngày sinh tách 3 phần — xem Relative.birthMonth/birthDay/birthYear.
+    private Integer birthMonth;
+    private Integer birthDay;
+    private Integer birthYear;
     private Integer age;
     private Long daysToBirthday;
     private String location;
@@ -38,7 +41,9 @@ public class RelativeDetailResponse {
             .nickname(r.getNickname())
             .groupType(r.getGroupType() != null ? r.getGroupType().name() : null)
             .gender(r.getGender() != null ? r.getGender().name() : null)
-            .dateOfBirth(r.getDateOfBirth())
+            .birthMonth(r.getBirthMonth())
+            .birthDay(r.getBirthDay())
+            .birthYear(r.getBirthYear())
             .age(age >= 0 ? age : null)
             .daysToBirthday(daysToBirthday)
             .location(r.getLocation())
@@ -58,6 +63,14 @@ public class RelativeDetailResponse {
         private Long id;
         private String title;
         private String categoryCode;
+        // Thiếu 2 field này khiến EventModel.fromJson ở mobile không có
+        // categoryColor -> colorFromHex('') fallback về xám cho MỌI sự kiện
+        // ở mục "Sự kiện của..." màn Chi tiết người thân, bất kể danh mục
+        // thật là gì (VD "Kỷ niệm" đáng lẽ tím vẫn hiện xám) — trong khi
+        // màn Sự kiện chính (GET /events, dùng EventResponse đầy đủ) vẫn
+        // lên màu đúng.
+        private String categoryIcon;
+        private String categoryColor;
         private LocalDate eventDate;
         private Boolean isActive;
 
@@ -66,6 +79,8 @@ public class RelativeDetailResponse {
                 .id(e.getId())
                 .title(e.getTitle())
                 .categoryCode(e.getCategory() != null ? e.getCategory().getCode() : null)
+                .categoryIcon(e.getCategory() != null ? e.getCategory().getIcon() : null)
+                .categoryColor(e.getCategory() != null ? e.getCategory().getColorHex() : null)
                 .eventDate(e.getEventDate())
                 .isActive(e.getIsActive())
                 .build();

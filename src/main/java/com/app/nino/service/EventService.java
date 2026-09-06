@@ -28,12 +28,16 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class EventService {
 
+    /** Code danh mục "Sinh nhật" trong bảng event_categories — xem V13 migration. */
+    private static final String BIRTHDAY_CATEGORY_CODE = "SINH_NHAT";
+
     private final EventRepository eventRepo;
     private final RelativeRepository relativeRepo;
     private final UserRepository userRepo;
     private final EventParticipantRepository participantRepo;
     private final EventCategoryRepository categoryRepo;
     private final NotificationRepository notificationRepo;
+    private final RelativeService relativeService;
 
     // ── GET CATEGORIES (picker "Danh mục" khi Thêm/Sửa sự kiện) ─────────
     // Chỉ trả danh mục hệ thống (isSystem=true) — danh mục user tự tạo
@@ -93,6 +97,22 @@ public class EventService {
                             new ResourceNotFoundException("Nguoi than khong ton tai"));
         }
 
+        // Chống trùng Event "Sinh nhật": RelativeService.syncBirthdayEvent()
+        // đã tự sinh 1 Event loại này khi thêm/sửa ngày sinh cho người thân.
+        // Nếu người dùng lại tự tay tạo thêm 1 Event danh mục Sinh nhật cho
+        // ĐÚNG người thân đã có sẵn -> cập nhật event đã có thay vì insert
+        // thêm bản ghi mới (tránh 2 Event + 2 bộ nhắc nhở + 2 thông báo
+        // trùng lặp cho cùng 1 sinh nhật).
+        if (relative != null && BIRTHDAY_CATEGORY_CODE.equals(category.getCode())) {
+            var existingBirthdayEvent = eventRepo
+                    .findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(relative.getId(), BIRTHDAY_CATEGORY_CODE);
+            if (existingBirthdayEvent.isPresent()) {
+                log.info("[Event] Da co san Event Sinh nhat (id={}) cho relativeId={} -> cap nhat thay vi tao trung",
+                    existingBirthdayEvent.get().getId(), relative.getId());
+                return update(existingBirthdayEvent.get().getId(), userId, req);
+            }
+        }
+
         Event.RecurrenceType recurrenceType = resolveRecurrenceType(req.getRecurrenceType());
         validateRecurrenceFields(recurrenceType, req);
 
@@ -126,6 +146,8 @@ public class EventService {
         userRepo.incrementEventCount(userId);
         if (relative != null)
             relativeRepo.incrementEventCount(relative.getId());
+
+        syncRelativeBirthdayIfNeeded(category, relative, userId, saved.getEventDate());
 
         log.info("[Event] Tao thanh cong: eventId={} userId={} title={}",
             saved.getId(), userId, saved.getTitle());
@@ -184,7 +206,10 @@ public class EventService {
             event.getReminders().addAll(buildReminders(req.getReminders(), event));
         }
 
-        EventResponse response = toResponse(eventRepo.save(event), LocalDate.now());
+        Event saved = eventRepo.save(event);
+        syncRelativeBirthdayIfNeeded(category, newRelative, userId, saved.getEventDate());
+
+        EventResponse response = toResponse(saved, LocalDate.now());
         log.info("[Event] Cap nhat thanh cong: eventId={} userId={}", id, userId);
         return response;
     }
@@ -202,6 +227,18 @@ public class EventService {
     }
 
     // ── PRIVATE HELPERS ─────────────────────────────────────────────────
+
+    /**
+     * Event "Sinh nhật" và Relative.dateOfBirth là 1 — nếu Event vừa lưu
+     * thuộc danh mục Sinh nhật và có gắn người thân, đẩy eventDate mới
+     * ngược lại thành dateOfBirth của người đó (chiều Relative -> Event
+     * nằm ở RelativeService.syncBirthdayEvent).
+     */
+    private void syncRelativeBirthdayIfNeeded(EventCategory category, Relative relative, Long userId, LocalDate eventDate) {
+        if (relative == null) return;
+        if (!BIRTHDAY_CATEGORY_CODE.equals(category.getCode())) return;
+        relativeService.syncDateOfBirthFromEvent(relative.getId(), userId, eventDate);
+    }
 
     /** Parse recurrenceType string -> enum, báo lỗi rõ ràng cho client thay vì 500. */
     private Event.RecurrenceType resolveRecurrenceType(String raw) {
@@ -280,6 +317,7 @@ public class EventService {
                 .id(e.getId())
                 .title(e.getTitle())
                 .categoryId(e.getCategory().getId())
+                .categoryCode(e.getCategory().getCode())
                 .categoryName(e.getCategory().getDisplayName())
                 .categoryIcon(e.getCategory().getIcon())
                 .categoryColor(e.getCategory().getColorHex())

@@ -11,6 +11,7 @@ public class EventResponse {
     private Long id;
     private String title;
     private Long categoryId;
+    private String categoryCode;
     private String categoryName;
     private String categoryIcon;
     private String categoryColor;

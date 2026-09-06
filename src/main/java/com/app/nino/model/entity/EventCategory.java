@@ -18,8 +18,8 @@ public class EventCategory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "code", nullable = false, unique = true, length = 20)
-    private String code;              // SINH_NHAT, KY_NIEM...
+    @Column(name = "code", nullable = false, length = 50)
+    private String code;              // SINH_NHAT, KY_NIEM, CUSTOM_<userId>_<ts>
 
     @Column(name = "display_name", nullable = false, length = 50)
     private String displayName;       // "Sinh nhật"

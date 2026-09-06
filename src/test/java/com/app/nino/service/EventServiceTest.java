@@ -6,6 +6,7 @@ import com.app.nino.model.dto.response.EventResponse;
 import com.app.nino.model.entity.Event;
 import com.app.nino.model.entity.EventCategory;
 import com.app.nino.model.entity.EventReminder;
+import com.app.nino.model.entity.Relative;
 import com.app.nino.model.entity.User;
 import com.app.nino.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -32,6 +34,7 @@ class EventServiceTest {
     @Mock private EventParticipantRepository participantRepo;
     @Mock private EventCategoryRepository categoryRepo;
     @Mock private NotificationRepository notificationRepo;
+    @Mock private RelativeService relativeService;
 
     @InjectMocks
     private EventService service;
@@ -176,5 +179,119 @@ class EventServiceTest {
         service.update(11L, 1L, req);
 
         verify(notificationRepo, never()).detachReminders(any());
+    }
+
+    // ── SYNC NGƯỢC SANG RELATIVE — sửa Event "Sinh nhật" thì dateOfBirth
+    // của người thân đó cũng phải đổi theo (xem RelativeServiceTest cho
+    // chiều ngược lại: Relative -> Event). ────────────────────────────────
+
+    private EventCategory birthdayCategory() {
+        return EventCategory.builder().id(3L).code("SINH_NHAT").displayName("Sinh nhật")
+            .icon("cake").colorHex("#FF6B6B").build();
+    }
+
+    @Test
+    void create_withBirthdayCategoryAndRelative_syncsRelativeDateOfBirth() {
+        Relative relative = Relative.builder().id(20L).user(User.builder().id(1L).build())
+            .groupType(Relative.GroupType.ME).build();
+        when(relativeRepo.findByIdAndUserId(20L, 1L)).thenReturn(java.util.Optional.of(relative));
+        when(categoryRepo.findById(3L)).thenReturn(java.util.Optional.of(birthdayCategory()));
+
+        CreateEventRequest req = baseRequest(null);
+        req.setCategoryId(3L);
+        req.setRelativeId(20L);
+        req.setEventDate(LocalDate.of(1970, 5, 20));
+
+        service.create(1L, req);
+
+        verify(relativeService).syncDateOfBirthFromEvent(20L, 1L, LocalDate.of(1970, 5, 20));
+    }
+
+    @Test
+    void create_withNonBirthdayCategory_doesNotSyncRelative() {
+        Relative relative = Relative.builder().id(20L).user(User.builder().id(1L).build())
+            .groupType(Relative.GroupType.ME).build();
+        when(relativeRepo.findByIdAndUserId(20L, 1L)).thenReturn(java.util.Optional.of(relative));
+
+        CreateEventRequest req = baseRequest(null); // categoryId=2L, "Khác"
+        req.setRelativeId(20L);
+
+        service.create(1L, req);
+
+        verifyNoInteractions(relativeService);
+    }
+
+    @Test
+    void update_changingBirthdayEventDate_syncsRelativeDateOfBirth() {
+        Relative relative = Relative.builder().id(20L).user(User.builder().id(1L).build())
+            .groupType(Relative.GroupType.ME).build();
+        User owner = User.builder().id(1L).build();
+        Event existing = Event.builder().id(30L).user(owner).category(birthdayCategory())
+            .relative(relative).eventDate(LocalDate.of(1970, 5, 20)).build();
+        when(eventRepo.findById(30L)).thenReturn(java.util.Optional.of(existing));
+        when(relativeRepo.findByIdAndUserId(20L, 1L)).thenReturn(java.util.Optional.of(relative));
+        when(categoryRepo.findById(3L)).thenReturn(java.util.Optional.of(birthdayCategory()));
+
+        CreateEventRequest req = baseRequest(null);
+        req.setCategoryId(3L);
+        req.setRelativeId(20L);
+        req.setEventDate(LocalDate.of(1970, 6, 21));
+
+        service.update(30L, 1L, req);
+
+        verify(relativeService).syncDateOfBirthFromEvent(20L, 1L, LocalDate.of(1970, 6, 21));
+    }
+
+    // ── CHỐNG TRÙNG EVENT SINH NHẬT — RelativeService.syncBirthdayEvent()
+    // đã tự sinh 1 Event "Sinh nhật" khi thêm ngày sinh cho người thân; nếu
+    // người dùng lại TỰ TAY tạo thêm 1 Event danh mục Sinh nhật cho ĐÚNG
+    // người thân đó qua màn "Tạo sự kiện", EventService.create() trước đây
+    // không kiểm tra gì cả -> insert thêm 1 Event tách biệt, dẫn tới 2 Event
+    // + 2 bộ nhắc nhở + 2 thông báo trùng lặp cho cùng 1 sinh nhật. ────────
+
+    @Test
+    void create_withBirthdayCategoryAndRelativeAlreadyHavingBirthdayEvent_updatesExistingInsteadOfDuplicating() {
+        User owner = User.builder().id(1L).build();
+        Relative relative = Relative.builder().id(20L).user(owner).groupType(Relative.GroupType.ME).build();
+        Event existingBirthdayEvent = Event.builder()
+                .id(40L).user(owner).relative(relative).category(birthdayCategory())
+                .eventDate(LocalDate.of(2026, 5, 20))
+                .reminders(new ArrayList<>())
+                .build();
+
+        when(relativeRepo.findByIdAndUserId(20L, 1L)).thenReturn(java.util.Optional.of(relative));
+        when(categoryRepo.findById(3L)).thenReturn(java.util.Optional.of(birthdayCategory()));
+        when(eventRepo.findFirstByRelativeIdAndCategory_CodeAndIsActiveTrue(20L, "SINH_NHAT"))
+                .thenReturn(java.util.Optional.of(existingBirthdayEvent));
+        when(eventRepo.findById(40L)).thenReturn(java.util.Optional.of(existingBirthdayEvent));
+
+        CreateEventRequest req = baseRequest(null);
+        req.setCategoryId(3L);
+        req.setRelativeId(20L);
+        req.setEventDate(LocalDate.of(2027, 5, 20));
+
+        service.create(1L, req);
+
+        // Chỉ 1 lần save duy nhất, nhắm thẳng vào Event đã có (id=40) — không
+        // insert Event mới.
+        verify(eventRepo, times(1)).save(any(Event.class));
+        verify(eventRepo).findById(40L);
+        assertEquals(LocalDate.of(2027, 5, 20), existingBirthdayEvent.getEventDate());
+        // Counter chỉ tăng khi thật sự tạo mới — event này không phải mới.
+        verify(userRepo, never()).incrementEventCount(any());
+        verify(relativeRepo, never()).incrementEventCount(any());
+    }
+
+    @Test
+    void update_changingNonBirthdayEvent_doesNotSyncRelative() {
+        User owner = User.builder().id(1L).build();
+        Event existing = Event.builder().id(31L).user(owner)
+            .category(EventCategory.builder().id(2L).code("KHAC").build())
+            .eventDate(LocalDate.now()).build();
+        when(eventRepo.findById(31L)).thenReturn(java.util.Optional.of(existing));
+
+        service.update(31L, 1L, baseRequest(null));
+
+        verifyNoInteractions(relativeService);
     }
 }

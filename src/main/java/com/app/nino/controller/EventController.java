@@ -1,7 +1,9 @@
 package com.app.nino.controller;
 
+import com.app.nino.model.dto.request.CreateCategoryRequest;
 import com.app.nino.model.dto.request.CreateEventRequest;
 import com.app.nino.model.dto.response.BaseResponse;
+import com.app.nino.service.CategoryService;
 import com.app.nino.service.EventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,9 +21,47 @@ import org.springframework.web.bind.annotation.*;
 public class EventController {
 
     private final EventService eventService;
+    private final CategoryService categoryService;
+
+    // ── CATEGORIES ──────────────────────────────────────────────────────
+
+    @GetMapping("/categories")
+    @Operation(summary = "Danh sach danh muc su kien (he thong + user tu tao)")
+    public ResponseEntity<BaseResponse<?>> getCategories(@AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(BaseResponse.success(categoryService.getCategories(userId)));
+    }
+
+    @PostMapping("/categories")
+    @Operation(summary = "Tao danh muc su kien tu tao (emoji icon)")
+    public ResponseEntity<BaseResponse<?>> createCategory(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody CreateCategoryRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(BaseResponse.success(categoryService.create(userId, req)));
+    }
+
+    @PutMapping("/categories/{id}")
+    @Operation(summary = "Cap nhat danh muc tu tao")
+    public ResponseEntity<BaseResponse<?>> updateCategory(
+            @PathVariable Long id,
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody CreateCategoryRequest req) {
+        return ResponseEntity.ok(BaseResponse.success(categoryService.update(id, userId, req)));
+    }
+
+    @DeleteMapping("/categories/{id}")
+    @Operation(summary = "Xoa danh muc tu tao")
+    public ResponseEntity<BaseResponse<?>> deleteCategory(
+            @PathVariable Long id,
+            @AuthenticationPrincipal Long userId) {
+        categoryService.delete(id, userId);
+        return ResponseEntity.ok(BaseResponse.success(null, "Xoa danh muc thanh cong"));
+    }
+
+    // ── EVENTS ──────────────────────────────────────────────────────────
 
     @GetMapping
-    @Operation(summary = "Danh sách sự kiện có filter")
+    @Operation(summary = "Danh sach su kien co filter")
     public ResponseEntity<BaseResponse<?>> getAll(
             @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) Long categoryId,
@@ -30,12 +70,6 @@ public class EventController {
             @RequestParam(required = false) Integer year) {
         return ResponseEntity.ok(
             BaseResponse.success(eventService.getEvents(userId, categoryId, relativeId, month, year)));
-    }
-
-    @GetMapping("/categories")
-    @Operation(summary = "Danh sách danh mục sự kiện (id/code/tên/icon/màu)")
-    public ResponseEntity<BaseResponse<?>> getCategories() {
-        return ResponseEntity.ok(BaseResponse.success(eventService.getCategories()));
     }
 
     @GetMapping("/upcoming")

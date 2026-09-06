@@ -31,18 +31,16 @@ cd nino-api
 # lần sau chỉ cần: git pull
 ```
 
-## 3. Chuẩn bị schema database (**bắt buộc trước lần chạy đầu tiên**)
+## 3. Database schema (Flyway tự động chạy migration)
 
-Project **không dùng Flyway tự động** (không có dependency Flyway trong `pom.xml`) và `JPA_DDL_AUTO=validate` — Hibernate chỉ **kiểm tra** schema khớp entity, không tự tạo bảng. Do đó phải tự chạy tay toàn bộ file SQL trong `src/main/resources/migration/` lên MySQL **theo đúng thứ tự số phiên bản** (V1 → V2 → … → V22...) trước khi start app lần đầu:
+Project dùng **Flyway** (`flyway-core` + `flyway-mysql` trong `pom.xml`) — schema được tự động migrate **mỗi khi app start**, không cần chạy tay file SQL nữa. `spring.jpa.hibernate.ddl-auto=validate` — Hibernate chỉ kiểm tra entity khớp schema, không tự tạo/sửa bảng, mọi thay đổi schema đều đi qua Flyway.
 
-```bash
-for f in $(ls src/main/resources/migration/*.sql | sort -V); do
-  echo ">> Chạy $f"
-  mysql -h 100.106.5.35 -u root -p event_app < "$f"
-done
-```
+- File migration: `src/main/resources/db/migration/V{n}__{mo_ta}.sql`, đặt tên đúng convention (`V<số>__<mô_tả>.sql`), Flyway tự áp dụng tuần tự theo số phiên bản.
+- DB prod **đã tồn tại từ trước** (tạo thủ công tới `V22`, trước khi bật Flyway) nên `baseline-on-migrate=true` (mặc định, override qua env `FLYWAY_BASELINE` — `docker-compose.yml` đã set sẵn `FLYWAY_BASELINE=true`): Flyway "nhận" các version ≤ `baseline-version` (mặc định `22`, override qua `FLYWAY_BASELINE_VERSION`) là đã áp dụng, chỉ tự chạy các file `V23__...` trở lên.
+- Với DB **rỗng** (server mới, chưa từng tạo schema thủ công), baseline không có tác dụng gì — Flyway tự chạy tuần tự từ `V1`.
+- `validate-on-migrate=true`: nếu checksum của migration đã chạy bị đổi (sửa lại file cũ) hoặc migration mới lỗi, Flyway sẽ **chặn app khởi động** (fail-fast) thay vì chạy tiếp với schema sai — xem log container để biết migration nào lỗi.
 
-> ⚠️ Mỗi khi pull code mới mà thấy có thêm file `.sql` mới trong `migration/`, phải chạy file đó lên MySQL **trước khi** (hoặc ngay khi) deploy code mới — nếu không app sẽ crash lúc start với lỗi `Schema-validation: missing table/column` vì entity không khớp schema hiện tại.
+> ⚠️ Không sửa lại file migration cũ đã chạy (sẽ làm sai checksum, app không start được) — luôn tạo file `V{n+1}__...sql` mới khi cần đổi schema. Chỉ cần `git pull` code mới về là đủ, **không cần** thao tác gì thêm trên MySQL trước khi deploy (xem mục 9).
 
 ## 4. Cấu hình `.env`
 
@@ -130,9 +128,10 @@ docker compose restart app
 
 ```bash
 git pull
-# nếu có file migration mới trong lần pull này → chạy nó lên MySQL trước (xem mục 3)
 docker compose up --build -d
 ```
+
+Nếu lần pull này có file migration mới (`V{n+1}__...sql`), **không cần** chạy tay lên MySQL — Flyway tự áp dụng khi app start (xem mục 3). Chỉ cần theo dõi log lúc container khởi động để chắc migration chạy thành công.
 
 ## 10. Rollback nhanh
 
@@ -145,7 +144,9 @@ docker compose up --build -d
 
 | Triệu chứng | Nguyên nhân thường gặp |
 |---|---|
-| App crash lúc start, log `Schema-validation: missing table/column` | Quên chạy file migration mới lên MySQL trước khi deploy (mục 3) |
+| App crash lúc start, log `FlywayException: Validate failed... checksum mismatch` | Có ai đó sửa lại file migration cũ đã chạy rồi — không được sửa file cũ, phải tạo file `V{n+1}` mới (mục 3) |
+| App crash lúc start, log `Migration ... failed` | File migration mới có lỗi SQL — sửa lại nội dung file `V{n+1}` đó (chưa từng chạy thành công thì sửa thoải mái), xoá dòng lỗi trong bảng `flyway_schema_history` nếu Flyway đã ghi nhận migration failed, rồi chạy lại |
+| App crash lúc start, log `Schema-validation: missing table/column` (Hibernate) | Flyway chạy xong nhưng entity không khớp migration vừa thêm — kiểm tra lại nội dung file `V{n+1}` so với entity |
 | Không kết nối được MySQL | Sai `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, MySQL chưa `bind-address` ra network, hoặc firewall/VPN (Tailscale) chặn |
 | Redis connection refused | Container `redis` không cùng network `shared-network`, hoặc sai `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` |
 | `docker compose up` báo network không tồn tại | `shared-network` chưa được tạo — chạy `docker network create shared-network` (mục 1) |
@@ -156,7 +157,7 @@ docker compose up --build -d
 
 - [ ] `.env` không commit git, đã đổi `JWT_SECRET` và `DB_PASSWORD` khỏi giá trị mẫu
 - [ ] `firebase-service-account.json` đã có ở `src/main/resources/`
-- [ ] Database đã chạy đủ migration mới nhất (mục 3)
+- [ ] Log lúc start container không có lỗi Flyway (`FlywayException`/`Migration ... failed`) — Flyway tự chạy migration khi start, kiểm tra log để chắc đã áp dụng thành công (mục 3)
 - [ ] Network `shared-network` tồn tại, MySQL reachable, container `redis` cùng network
 - [ ] `curl .../internal/health-check` trả về OK
 - [ ] `SWAGGER_ENABLED=false` (mặc định ở prod) — không lộ Swagger UI ra ngoài
