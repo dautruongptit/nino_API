@@ -29,6 +29,9 @@ public class JwtTokenProvider {
     @Value("${JWT_REFRESH_EXPIRATION:604800000}")
     private long refreshExpiration;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private TokenBlacklistService tokenBlacklistService;
+
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
@@ -63,7 +66,6 @@ public class JwtTokenProvider {
     public boolean validateToken(String token) {
         try {
             Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(token);
-            return true;
         } catch (ExpiredJwtException e) {
             log.warn("[JWT] Token da het han: subject={}", e.getClaims().getSubject());
             return false;
@@ -71,6 +73,19 @@ public class JwtTokenProvider {
             log.warn("[JWT] Token khong hop le: {}", e.getMessage());
             return false;
         }
+        if (tokenBlacklistService.isBlacklisted(token)) {
+            log.warn("[JWT] Token da bi thu hoi (logout)");
+            return false;
+        }
+        return true;
+    }
+
+    /** Thoi gian con lai truoc khi token tu het han — dung de dat TTL blacklist khi logout. */
+    public java.time.Duration getRemainingValidity(String token) {
+        Claims claims = Jwts.parser().verifyWith(getSigningKey()).build()
+            .parseSignedClaims(token).getPayload();
+        long remainingMs = claims.getExpiration().getTime() - System.currentTimeMillis();
+        return java.time.Duration.ofMillis(Math.max(remainingMs, 0));
     }
 
     public Long getUserId(String token) {
