@@ -6,7 +6,6 @@ import com.app.nino.model.entity.User;
 import com.app.nino.model.entity.UserDevice;
 import com.app.nino.repository.UserDeviceRepository;
 import com.app.nino.repository.UserRepository;
-import com.app.nino.service.FcmService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,7 +25,6 @@ public class DeviceController {
 
     private final UserDeviceRepository deviceRepo;
     private final UserRepository       userRepo;
-    private final FcmService           fcmService;
 
     /**
      * POST /users/me/devices
@@ -57,9 +55,6 @@ public class DeviceController {
                 .build());
 
         deviceRepo.save(device);
-
-        // Gui push test ngay de client xac nhan hoat dong
-        fcmService.sendTestPush(req.getFcmToken());
 
         return ResponseEntity.ok(BaseResponse.success(null, "Đăng ký thiết bị thành công"));
     }
