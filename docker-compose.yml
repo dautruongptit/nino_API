@@ -1,8 +1,8 @@
 services:
   app:
     build:
-        context: .
-        dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8086:8086"
     container_name: nino_app
@@ -13,10 +13,25 @@ services:
       # true: DB prod da co schema toi V22 duoc apply thu cong truoc khi
       # dung Flyway -> baseline de khong chay lai V1-V22 (xem application.yml)
       FLYWAY_BASELINE:        "true"
+      DB_URL: "jdbc:mysql://mysql:3306/${DB_NAME:-event_app}?useSSL=false&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true"
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      SERVER_PORT: ${SERVER_PORT:-8086}
+      SPRING_FLYWAY_REPAIR_ON_MIGRATE: "true"
+      TZ: Asia/Ho_Chi_Minh
     volumes:
       - ./data/uploads:/app/uploads
       - ./data/logs:/app/logs
     restart: unless-stopped
+    networks:
+      - shared-network
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --port 6380 --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     networks:
       - shared-network
 networks:
