@@ -158,6 +158,34 @@ class EventServiceTest {
     }
 
     @Test
+    void update_withEmptyRemindersList_doesNotWipeExistingReminders() {
+        // Bug that lost a real reminder in prod: create() only touches
+        // reminders when the list is non-empty, but update() used to act on
+        // any non-null list — including an empty one. Since Event.reminders
+        // has orphanRemoval=true, an update request carrying "reminders: []"
+        // (e.g. an edit screen that doesn't round-trip the existing reminder)
+        // silently deleted the reminder with no replacement.
+        User owner = User.builder().id(1L).build();
+        EventReminder oldReminder = EventReminder.builder().id(100L).remindHoursBefore(1).build();
+        Event existing = Event.builder()
+                .id(12L)
+                .user(owner)
+                .reminders(new ArrayList<>(List.of(oldReminder)))
+                .build();
+        oldReminder.setEvent(existing);
+        when(eventRepo.findById(12L)).thenReturn(java.util.Optional.of(existing));
+
+        CreateEventRequest req = baseRequest(null);
+        req.setReminders(List.of());
+
+        service.update(12L, 1L, req);
+
+        assertEquals(1, existing.getReminders().size());
+        assertEquals(100L, existing.getReminders().get(0).getId());
+        verify(notificationRepo, never()).detachReminders(any());
+    }
+
+    @Test
     void update_replacingReminders_whenOldReminderHasNoId_doesNotCallDetach() {
         // Reminder cũ chưa từng persist (id null, VD giữa lúc build entity) —
         // không có gì để gỡ liên kết, không nên gọi detachReminders với danh

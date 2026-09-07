@@ -194,7 +194,13 @@ public class EventService {
         // kết đó trước — orphanRemoval sẽ DELETE reminder cũ khi flush, và
         // MySQL sẽ chặn DELETE đó vì khoá ngoại nếu còn notification tham
         // chiếu (SQL error 1451).
-        if (req.getReminders() != null) {
+        //
+        // Chỉ thay thế khi list KHÔNG rỗng (giống create()) — client gửi
+        // "reminders": [] (thường do màn sửa không load lại reminder cũ
+        // trước khi submit) từng bị hiểu là "xoá hết", âm thầm mất reminder
+        // mà không có gì thay thế. Muốn xoá hết reminder của 1 event, dùng
+        // API xoá riêng thay vì gửi mảng rỗng qua update.
+        if (req.getReminders() != null && !req.getReminders().isEmpty()) {
             List<Long> oldReminderIds = event.getReminders().stream()
                     .map(EventReminder::getId)
                     .filter(reminderId -> reminderId != null)
@@ -290,6 +296,7 @@ public class EventService {
                     .event(event)
                     .remindDaysBefore(r.getRemindDaysBefore())
                     .remindHoursBefore(r.getRemindHoursBefore())
+                    .remindMinutesBefore(r.getRemindMinutesBefore())
                     .repeatIntervalMinutes(r.getRepeatIntervalMinutes())
                     .isEnabled(Boolean.TRUE.equals(r.getIsEnabled()))
                     .build());
@@ -308,6 +315,7 @@ public class EventService {
                         .id(r.getId())
                         .remindDaysBefore(r.getRemindDaysBefore())
                         .remindHoursBefore(r.getRemindHoursBefore())
+                        .remindMinutesBefore(r.getRemindMinutesBefore())
                         .repeatIntervalMinutes(r.getRepeatIntervalMinutes())
                         .isEnabled(r.getIsEnabled())
                         .build())

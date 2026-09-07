@@ -9,6 +9,7 @@ public class ReminderResponse {
     private Long id;
     private Integer remindDaysBefore;
     private Integer remindHoursBefore;
+    private Integer remindMinutesBefore;
     private Integer repeatIntervalMinutes;
     private Boolean isEnabled;
 }

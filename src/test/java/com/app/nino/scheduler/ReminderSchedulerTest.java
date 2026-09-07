@@ -157,6 +157,27 @@ class ReminderSchedulerTest {
     }
 
     @Test
+    void checkReminders_dueReminderWithMinutesBefore_sendsNotification() {
+        Event event = eventOn(LocalDate.now(), LocalTime.now().plusMinutes(1));
+        EventReminder reminder = EventReminder.builder()
+            .id(10L)
+            .event(event)
+            .remindMinutesBefore(30) // trigger = eventTime - 30' = đã qua ~29' trước -> đến hạn
+            .isEnabled(true)
+            .notifiedAt(null)
+            .build();
+
+        when(reminderRepo.findDueCandidates(any())).thenReturn(List.of(reminder));
+        Cache cache = mock(Cache.class);
+        when(cacheManager.getCache("unreadCount")).thenReturn(cache);
+
+        scheduler.checkReminders();
+
+        verify(fcmService).sendToUser(eq(1L), anyString(), anyString(), any(Map.class));
+        verify(reminderRepo).save(argThat((EventReminder r) -> r.getNotifiedAt() != null));
+    }
+
+    @Test
     void checkReminders_notYetDueReminder_sendsNothing() {
         Event event = eventOn(LocalDate.now(), LocalTime.now().plusHours(5));
         EventReminder reminder = EventReminder.builder()

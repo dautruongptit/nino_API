@@ -30,6 +30,9 @@ public class EventReminder {
     @Column(name = "remind_hours_before")
     private Integer remindHoursBefore;
 
+    @Column(name = "remind_minutes_before")
+    private Integer remindMinutesBefore;
+
     @Column(name = "is_enabled")
     @Builder.Default
     private Boolean isEnabled = true;
@@ -60,6 +63,9 @@ public class EventReminder {
         }
         if (remindHoursBefore != null) {
             return base.minusHours(remindHoursBefore);
+        }
+        if (remindMinutesBefore != null) {
+            return base.minusMinutes(remindMinutesBefore);
         }
         return base;
     }
