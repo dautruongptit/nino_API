@@ -182,6 +182,7 @@ public class AuthService {
     // Thu hoi ngay access token dang goi request nay (va refresh token neu
     // client gui kem) thay vi cho no tu het han thu dong (toi 7 ngay); huy
     // dang ky thiet bi (fcmToken) neu client gui kem de dung push ngay lap tuc.
+    @Transactional
     public void logout(Long userId, String accessToken, String refreshToken, String fcmToken) {
         if (accessToken != null) {
             tokenBlacklistService.blacklist(accessToken, jwtTokenProvider.getRemainingValidity(accessToken));

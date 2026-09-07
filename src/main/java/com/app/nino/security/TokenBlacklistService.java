@@ -30,7 +30,7 @@ public class TokenBlacklistService {
         try {
             redisTemplate.opsForValue().set(KEY_PREFIX + token, "1", ttl);
         } catch (Exception e) {
-            log.warn("[TokenBlacklist] Khong the ghi Redis, token se van hop le toi khi tu het han: {}",
+            log.error("[TokenBlacklist] Khong the ghi Redis, token se van hop le toi khi tu het han: {}",
                 e.getMessage());
         }
     }

@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -65,6 +66,7 @@ public class DeviceController {
      */
     @DeleteMapping
     @Operation(summary = "Hủy đăng ký FCM token (gọi khi logout)")
+    @Transactional
     public ResponseEntity<BaseResponse<?>> unregisterDevice(
             @AuthenticationPrincipal Long userId,
             @RequestBody Map<String, String> body) {
