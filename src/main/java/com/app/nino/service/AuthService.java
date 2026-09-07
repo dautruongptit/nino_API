@@ -122,14 +122,14 @@ public class AuthService {
 
         if (!user.canLogin()) {
             log.warn("[Auth] Login that bai — tai khoan chua kich hoat: userId={}", user.getId());
-            saveLoginHistory(user, ip, userAgent, false, LoginHistory.FailureReason.ACCOUNT_INACTIVE);
+            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.ACCOUNT_INACTIVE);
             throw new UnauthorizedException("Tài khoản chưa được kích hoạt");
         }
 
         if (user.isCurrentlyLocked()) {
             log.warn("[Auth] Login that bai — tai khoan dang bi khoa: userId={} unlockInMinutes={}",
                 user.getId(), user.getMinutesUntilUnlock());
-            saveLoginHistory(user, ip, userAgent, false, LoginHistory.FailureReason.ACCOUNT_LOCKED);
+            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.ACCOUNT_LOCKED);
             throw new UnauthorizedException(
                 "Tài khoản đang bị khóa, thử lại sau " + user.getMinutesUntilUnlock() + " phút");
         }
@@ -137,14 +137,14 @@ public class AuthService {
         if (user.getPasswordHash() == null
                 || !passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
             handleFailedLogin(user);
-            saveLoginHistory(user, ip, userAgent, false, LoginHistory.FailureReason.WRONG_PASSWORD);
+            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.WRONG_PASSWORD);
             log.warn("[Auth] Login that bai — sai mat khau: userId={} failedCount={}",
                 user.getId(), user.getFailedLoginCount());
             throw new UnauthorizedException("Email hoặc mật khẩu không đúng");
         }
 
         handleSuccessLogin(user, ip);
-        saveLoginHistory(user, ip, userAgent, true, null);
+        saveLoginHistory(user, ip, userAgent, req.getDeviceName(), true, null);
         log.info("[Auth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
         String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles());
@@ -323,13 +323,14 @@ public class AuthService {
         userRepo.save(user);
     }
 
-    private void saveLoginHistory(User user, String ip, String userAgent,
+    private void saveLoginHistory(User user, String ip, String userAgent, String deviceName,
                                    boolean success, LoginHistory.FailureReason reason) {
         LoginHistory history = LoginHistory.builder()
             .user(user)
             .ipAddress(ip)
             .userAgent(userAgent)
             .deviceType(DeviceParser.parseDeviceType(userAgent))
+            .deviceName(deviceName)
             .os(DeviceParser.parseOs(userAgent))
             .browser(DeviceParser.parseBrowser(userAgent))
             .isSuccess(success)

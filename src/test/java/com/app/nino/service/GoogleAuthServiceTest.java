@@ -66,7 +66,7 @@ class GoogleAuthServiceTest {
         when(roleRepo.findByName("ROLE_USER")).thenReturn(Optional.of(Role.builder().id(1L).name("ROLE_USER").build()));
         when(userRepo.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service.loginWithGoogle("id-token", httpRequest);
+        service.loginWithGoogle("id-token", httpRequest, null);
 
         verify(userRepo, atLeastOnce()).save(argThat(u ->
             "https://google.com/avatar-new.jpg".equals(u.getAvatarUrl())));
@@ -90,10 +90,26 @@ class GoogleAuthServiceTest {
         when(userRepo.findByGoogleId("g-2")).thenReturn(Optional.of(existing));
         when(userRepo.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        service.loginWithGoogle("id-token", httpRequest);
+        service.loginWithGoogle("id-token", httpRequest, null);
 
         assertEquals("https://google.com/avatar-changed.jpg", existing.getAvatarUrl());
         verify(userRepo, atLeastOnce()).save(argThat(u ->
             "https://google.com/avatar-changed.jpg".equals(u.getAvatarUrl())));
+    }
+
+    @Test
+    void loginWithGoogle_withDeviceName_savesItOnLoginHistory() throws Exception {
+        when(googleIdToken.getPayload()).thenReturn(payloadWith("g-1", "a@b.com", "pic.jpg"));
+        User user = User.builder().id(1L).email("a@b.com")
+            .authProvider(User.AuthProvider.GOOGLE).status("ACT")
+            .roles(new HashSet<>()).build();
+        when(userRepo.findByGoogleId("g-1")).thenReturn(Optional.of(user));
+
+        service.loginWithGoogle("id-token", httpRequest, "iPhone 15 Pro");
+
+        org.mockito.ArgumentCaptor<com.app.nino.model.entity.LoginHistory> captor =
+            org.mockito.ArgumentCaptor.forClass(com.app.nino.model.entity.LoginHistory.class);
+        verify(loginHistoryRepo).save(captor.capture());
+        assertEquals("iPhone 15 Pro", captor.getValue().getDeviceName());
     }
 }

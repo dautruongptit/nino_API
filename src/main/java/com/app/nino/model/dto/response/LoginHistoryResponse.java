@@ -11,6 +11,7 @@ public class LoginHistoryResponse {
     private Long          id;
     private String        ipAddress;
     private String        deviceType;   // Mobile | Desktop | Tablet
+    private String        deviceName;   // VD "Pixel 8" — tu client gui khi login, co the null (log cu)
     private String        os;           // Windows | macOS | Android | iOS
     private String        browser;      // Chrome | Safari | Firefox | Edge
     private String        country;
@@ -23,6 +24,7 @@ public class LoginHistoryResponse {
             .id(h.getId())
             .ipAddress(h.getIpAddress())
             .deviceType(h.getDeviceType())
+            .deviceName(h.getDeviceName())
             .os(h.getOs())
             .browser(h.getBrowser())
             .country(h.getCountry())

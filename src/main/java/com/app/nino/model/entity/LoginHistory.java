@@ -31,6 +31,9 @@ public class LoginHistory {
     @Column(name = "device_type", length = 30)
     private String deviceType;
 
+    @Column(name = "device_name", length = 100)
+    private String deviceName;
+
     @Column(name = "os", length = 100)
     private String os;
 

@@ -43,7 +43,7 @@ public class GoogleAuthService {
     private final GoogleIdTokenVerifier  googleIdTokenVerifier;
 
     @Transactional
-    public AuthResponse loginWithGoogle(String idToken, HttpServletRequest httpRequest) {
+    public AuthResponse loginWithGoogle(String idToken, HttpServletRequest httpRequest, String deviceName) {
         log.info("[GoogleAuth] Login attempt voi Google idToken");
 
         GoogleIdToken.Payload payload = verifyIdToken(idToken);
@@ -84,7 +84,7 @@ public class GoogleAuthService {
 
         String ip = DeviceParser.getClientIp(httpRequest);
         handleSuccessLogin(user, ip);
-        saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"));
+        saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"), deviceName);
         log.info("[GoogleAuth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
         String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles());
@@ -140,12 +140,13 @@ public class GoogleAuthService {
         userRepo.save(user);
     }
 
-    private void saveLoginHistory(User user, String ip, String userAgent) {
+    private void saveLoginHistory(User user, String ip, String userAgent, String deviceName) {
         LoginHistory history = LoginHistory.builder()
             .user(user)
             .ipAddress(ip)
             .userAgent(userAgent)
             .deviceType(DeviceParser.parseDeviceType(userAgent))
+            .deviceName(deviceName)
             .os(DeviceParser.parseOs(userAgent))
             .browser(DeviceParser.parseBrowser(userAgent))
             .isSuccess(true)

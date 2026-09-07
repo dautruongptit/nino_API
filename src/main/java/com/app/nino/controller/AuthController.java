@@ -53,7 +53,7 @@ public class AuthController {
             @Valid @RequestBody GoogleLoginRequest req,
             HttpServletRequest httpRequest) {
         return ResponseEntity.ok(
-            BaseResponse.success(googleAuthService.loginWithGoogle(req.getIdToken(), httpRequest)));
+            BaseResponse.success(googleAuthService.loginWithGoogle(req.getIdToken(), httpRequest, req.getDeviceName())));
     }
 
     @PostMapping("/refresh")

@@ -16,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -81,5 +83,36 @@ class AuthServiceTest {
         service.logout(1L, "access-1", null, null);
 
         verifyNoInteractions(userDeviceRepo);
+    }
+
+    // ── LOGIN — device name capture ─────────────────────────────────────────
+
+    @Test
+    void login_withDeviceName_savesItOnLoginHistory() {
+        User user = User.builder().id(1L).email("a@b.com")
+            .passwordHash("hashed").status("ACT").roles(new java.util.HashSet<>()).build();
+        when(userRepo.findByEmail("a@b.com")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("pw", "hashed")).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(any(), any())).thenReturn("access-1");
+        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh-1");
+
+        jakarta.servlet.http.HttpServletRequest httpRequest =
+            org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(httpRequest.getHeader("User-Agent")).thenReturn("okhttp/4.12");
+        // DeviceParser.getClientIp() doc header nay truoc — stub de tranh
+        // Mockito strict-stubbing bao "argument mismatch" tren cung method getHeader().
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
+
+        com.app.nino.model.dto.request.LoginRequest req = new com.app.nino.model.dto.request.LoginRequest();
+        req.setEmail("a@b.com");
+        req.setPassword("pw");
+        req.setDeviceName("Pixel 8");
+
+        service.login(req, httpRequest);
+
+        org.mockito.ArgumentCaptor<com.app.nino.model.entity.LoginHistory> captor =
+            org.mockito.ArgumentCaptor.forClass(com.app.nino.model.entity.LoginHistory.class);
+        verify(loginHistoryRepo).save(captor.capture());
+        assertEquals("Pixel 8", captor.getValue().getDeviceName());
     }
 }

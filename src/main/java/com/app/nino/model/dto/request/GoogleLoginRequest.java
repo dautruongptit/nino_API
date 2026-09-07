@@ -8,4 +8,7 @@ public class GoogleLoginRequest {
 
     @NotBlank(message = "idToken khong duoc de trong")
     private String idToken;
+
+    /** Tuy chon — VD "Pixel 8", "iPhone 15 Pro" — hien thi trong lich su dang nhap. */
+    private String deviceName;
 }
