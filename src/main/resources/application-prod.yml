@@ -32,3 +32,5 @@ management:
 logging:
   level:
     com.app.nino: ${LOG_LEVEL_APP:INFO}
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.SQL: WARN

@@ -136,6 +136,7 @@ logging:
     org.hibernate.type.descriptor: WARN
     com.zaxxer.hikari:             WARN
     org.hibernate.orm.jdbc.bind: TRACE
+
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n"
     file:    "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n"
