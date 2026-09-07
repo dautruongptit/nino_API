@@ -139,6 +139,7 @@ public class EventService {
             List<EventReminder> reminders = buildReminders(req.getReminders(), event);
             event.setReminders(reminders);
         }
+        ensureDefaultReminderWhenNone(event);
 
         Event saved = eventRepo.save(event);
 
@@ -211,6 +212,7 @@ public class EventService {
             event.getReminders().clear();
             event.getReminders().addAll(buildReminders(req.getReminders(), event));
         }
+        ensureDefaultReminderWhenNone(event);
 
         Event saved = eventRepo.save(event);
         syncRelativeBirthdayIfNeeded(category, newRelative, userId, saved.getEventDate());
@@ -285,6 +287,19 @@ public class EventService {
             throw new ForbiddenException("Ban khong co quyen truy cap su kien nay");
         }
         return e;
+    }
+
+    /**
+     * Không chọn nhắc nhở nào -> mặc định nhắc đúng vào giờ đã chọn cho sự
+     * kiện (remind*Before đều null -> computeTriggerTime trả về đúng
+     * eventDate/eventTime), thay vì im lặng không nhắc gì.
+     */
+    private void ensureDefaultReminderWhenNone(Event event) {
+        if (!event.getReminders().isEmpty()) return;
+        event.getReminders().add(EventReminder.builder()
+                .event(event)
+                .isEnabled(true)
+                .build());
     }
 
     /** Build danh sách EventReminder từ request list. */

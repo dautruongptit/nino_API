@@ -126,6 +126,39 @@ class EventServiceTest {
     }
 
     @Test
+    void create_withoutReminders_addsDefaultReminderAtEventTime() {
+        // Không chọn nhắc nhở nào -> mặc định nhắc đúng vào giờ đã chọn cho
+        // sự kiện (không remind*Before nào), thay vì im lặng không nhắc gì.
+        CreateEventRequest req = baseRequest(null);
+
+        EventResponse res = service.create(1L, req);
+
+        assertEquals(1, res.getReminders().size());
+        var reminder = res.getReminders().get(0);
+        assertEquals(null, reminder.getRemindDaysBefore());
+        assertEquals(null, reminder.getRemindHoursBefore());
+        assertEquals(null, reminder.getRemindMinutesBefore());
+    }
+
+    @Test
+    void update_whenEventHasNoRemindersAndRequestOmitsThem_addsDefaultReminderAtEventTime() {
+        // Sự kiện cũ không có reminder nào (VD tạo trước khi có default này)
+        // -> sửa sự kiện (không đụng tới reminders) cũng tự vá thêm 1 default.
+        User owner = User.builder().id(1L).build();
+        Event existing = Event.builder()
+                .id(13L)
+                .user(owner)
+                .reminders(new ArrayList<>())
+                .build();
+        when(eventRepo.findById(13L)).thenReturn(java.util.Optional.of(existing));
+
+        service.update(13L, 1L, baseRequest(null));
+
+        assertEquals(1, existing.getReminders().size());
+        assertEquals(null, existing.getReminders().get(0).getRemindHoursBefore());
+    }
+
+    @Test
     void update_replacingReminders_detachesNotificationsFromOldRemindersFirst() {
         // Sự kiện đã tồn tại, có 1 reminder cũ (id=100) — mô phỏng đúng
         // trạng thái gây lỗi thật: orphanRemoval sẽ DELETE reminder này khi
