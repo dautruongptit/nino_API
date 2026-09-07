@@ -15,8 +15,10 @@ import com.app.nino.model.entity.Role;
 import com.app.nino.model.entity.User;
 import com.app.nino.repository.LoginHistoryRepository;
 import com.app.nino.repository.RoleRepository;
+import com.app.nino.repository.UserDeviceRepository;
 import com.app.nino.repository.UserRepository;
 import com.app.nino.security.JwtTokenProvider;
+import com.app.nino.security.TokenBlacklistService;
 import com.app.nino.util.DeviceParser;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -62,8 +64,10 @@ public class AuthService {
     private final UserRepository         userRepo;
     private final RoleRepository         roleRepo;
     private final LoginHistoryRepository loginHistoryRepo;
+    private final UserDeviceRepository   userDeviceRepo;        // NEW
     private final PasswordEncoder        passwordEncoder;
     private final JwtTokenProvider       jwtTokenProvider;
+    private final TokenBlacklistService  tokenBlacklistService; // NEW
 
     // ── REGISTER ──────────────────────────────────────────────────────────────
     @Transactional
@@ -172,6 +176,24 @@ public class AuthService {
             .accessToken(newAccessToken).refreshToken(newRefreshToken)
             .userId(user.getId()).fullName(user.getFullName()).email(user.getEmail())
             .build();
+    }
+
+    // ── LOGOUT ────────────────────────────────────────────────────────────────
+    // Thu hoi ngay access token dang goi request nay (va refresh token neu
+    // client gui kem) thay vi cho no tu het han thu dong (toi 7 ngay); huy
+    // dang ky thiet bi (fcmToken) neu client gui kem de dung push ngay lap tuc.
+    public void logout(Long userId, String accessToken, String refreshToken, String fcmToken) {
+        if (accessToken != null) {
+            tokenBlacklistService.blacklist(accessToken, jwtTokenProvider.getRemainingValidity(accessToken));
+        }
+        if (refreshToken != null && jwtTokenProvider.validateToken(refreshToken)) {
+            tokenBlacklistService.blacklist(refreshToken, jwtTokenProvider.getRemainingValidity(refreshToken));
+        }
+        if (fcmToken != null) {
+            userDeviceRepo.deleteByFcmTokenAndUserId(fcmToken, userId);
+        }
+        log.info("[Auth] Dang xuat: userId={} thuHoiAccessToken={} thuHoiRefreshToken={} huyThietBi={}",
+            userId, accessToken != null, refreshToken != null, fcmToken != null);
     }
 
     // ── PROFILE — cache 30 phút ──────────────────────────────────────────────

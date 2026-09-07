@@ -2,6 +2,7 @@ package com.app.nino.controller;
 
 import com.app.nino.model.dto.request.GoogleLoginRequest;
 import com.app.nino.model.dto.request.LoginRequest;
+import com.app.nino.model.dto.request.LogoutRequest;
 import com.app.nino.model.dto.request.RefreshTokenRequest;
 import com.app.nino.model.dto.request.RegisterRequest;
 import com.app.nino.model.dto.response.BaseResponse;
@@ -14,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,8 +64,25 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Đăng xuất (stateless — client tự xóa token)")
-    public ResponseEntity<BaseResponse<?>> logout() {
+    @Operation(summary = "Đăng xuất",
+               description = "Thu hồi ngay access token hiện tại (và refresh token/thiết bị nếu gửi kèm trong body).")
+    public ResponseEntity<BaseResponse<?>> logout(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody(required = false) LogoutRequest req,
+            HttpServletRequest httpRequest) {
+        authService.logout(
+            userId,
+            extractBearerToken(httpRequest),
+            req != null ? req.getRefreshToken() : null,
+            req != null ? req.getFcmToken() : null);
         return ResponseEntity.ok(BaseResponse.success(null, "Đăng xuất thành công"));
+    }
+
+    private String extractBearerToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring(7);
+        }
+        return null;
     }
 }
