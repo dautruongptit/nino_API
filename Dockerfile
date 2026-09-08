@@ -34,7 +34,7 @@ USER appuser
 EXPOSE 8086
 
 # Health check — dùng context-path /api/v1 (SEC-25)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=24h --timeout=5s --start-period=40s --retries=3 \
     CMD wget -qO- http://localhost:8086/api/v1/internal/health-check || exit 1
 
 ENTRYPOINT ["java", \
