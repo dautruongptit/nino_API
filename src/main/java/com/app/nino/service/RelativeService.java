@@ -349,6 +349,10 @@ public class RelativeService {
             case "CON"         -> "Con Trai/Con Gái";
             case "NGUOI_YEU"   -> "Người yêu";
             case "NGUOI_THAN"  -> "Người Thân";
+            case "CO_DI"       -> "Cô/Dì";
+            case "CHU_BAC_CAU" -> "Chú/Bác/Cậu";
+            case "CHAU"        -> "Cháu";
+            case "DAU_RE"      -> "Dâu/Rể";
             default            -> groupType;
         };
     }

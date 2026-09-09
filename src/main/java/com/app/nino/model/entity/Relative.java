@@ -99,13 +99,15 @@ public class Relative {
     /**
      * GIA_DINH/CON_CAI/BAN_BE là nhóm cũ, giữ lại CHỈ để không vỡ dữ liệu cũ
      * (KHÔNG còn hiện trong picker "Quan hệ" mới — xem
-     * {@code relative_form_screen.dart}). Danh sách chọn mới (theo ảnh mẫu
-     * "Quan hệ với bạn"): BAN_THAN, ONG, BA, BO, ME, VO_CHONG, ANH_CHI_EM,
-     * CON, NGUOI_YEU, NGUOI_THAN.
+     * {@code relative_form_screen.dart}). Danh sách chọn hiện dùng (theo ảnh
+     * mẫu "Quan hệ với bạn" + 4 giá trị "gộp" bổ sung ở V30 để phủ các quan
+     * hệ họ hàng phổ biến còn thiếu): BAN_THAN, ONG, BA, BO, ME, VO_CHONG,
+     * ANH_CHI_EM, CON, NGUOI_YEU, NGUOI_THAN, CO_DI, CHU_BAC_CAU, CHAU, DAU_RE.
      */
     public enum GroupType {
         GIA_DINH, VO_CHONG, CON_CAI, BAN_BE, ANH_CHI_EM,
-        BAN_THAN, ONG, BA, BO, ME, CON, NGUOI_YEU, NGUOI_THAN
+        BAN_THAN, ONG, BA, BO, ME, CON, NGUOI_YEU, NGUOI_THAN,
+        CO_DI, CHU_BAC_CAU, CHAU, DAU_RE
     }
 
     public enum Gender {
