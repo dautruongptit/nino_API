@@ -262,4 +262,23 @@ class AuthServiceTest {
 
         assertDoesNotThrow(() -> service.refreshToken("old-refresh"));
     }
+
+    @Test
+    void refreshToken_withNullSid_skipsHistoryLookupEntirely() {
+        // Token cu tao truoc khi co claim "sid" (Task 2) — getSid() tra ve
+        // null. PHAI bo qua hoan toan buoc tra LoginHistory: goi
+        // findBySessionId(null) tren repository THAT (khong mock) se nem
+        // IncorrectResultSizeDataAccessException vi Hibernate dich "= NULL"
+        // thanh "IS NULL", khop MOI dong co session_id null trong bang.
+        when(jwtTokenProvider.validateToken("old-refresh")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("old-refresh")).thenReturn("refresh");
+        when(jwtTokenProvider.getUserId("old-refresh")).thenReturn(1L);
+        when(jwtTokenProvider.getSid("old-refresh")).thenReturn(null);
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(
+            User.builder().id(1L).email("a@b.com").roles(new java.util.HashSet<>()).build()));
+
+        assertDoesNotThrow(() -> service.refreshToken("old-refresh"));
+
+        verifyNoInteractions(loginHistoryRepo);
+    }
 }

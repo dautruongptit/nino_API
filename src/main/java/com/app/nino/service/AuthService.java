@@ -176,14 +176,23 @@ public class AuthService {
 
         // sid da bi thu hoi (dang xuat tu xa) nhung Redis chua kip phan anh —
         // hang phong thu thu 2 ben canh validateToken() da kiem tra blacklist.
-        loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
-            if (history.getRevokedAt() != null) {
-                throw new UnauthorizedException("Phiên đăng nhập đã bị thu hồi");
-            }
-            history.setRefreshExpiresAt(
-                LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs())));
-            loginHistoryRepo.save(history);
-        });
+        //
+        // Guard sid != null: token cu (mint truoc Task 2) khong co claim "sid"
+        // nen getSid() tra ve null. findBySessionId(null) se bi Hibernate dich
+        // "= NULL" thanh "IS NULL", khop MOI dong co session_id null trong bang
+        // login_histories — nem IncorrectResultSizeDataAccessException khi co
+        // nhieu hon 1 dong nhu vay. Token cu van phai refresh thanh cong, chi la
+        // khong co LoginHistory nao de cap nhat.
+        if (sid != null) {
+            loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
+                if (history.getRevokedAt() != null) {
+                    throw new UnauthorizedException("Phiên đăng nhập đã bị thu hồi");
+                }
+                history.setRefreshExpiresAt(
+                    LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs())));
+                loginHistoryRepo.save(history);
+            });
+        }
 
         String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
