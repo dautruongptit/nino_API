@@ -44,12 +44,15 @@ class AuthServiceTest {
 
     @Test
     void logout_blacklistsSessionBySid() {
+        // Khong co dong LoginHistory (findBySessionId -> empty theo mac dinh) va
+        // client khong gui refresh token -> TTL la tron cua so refresh, KHONG
+        // phai han con lai cua access token.
         when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
-        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
 
         service.logout(1L, "access-1", null, null);
 
-        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMinutes(30));
+        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMillis(604_800_000L));
     }
 
     @Test
@@ -66,28 +69,86 @@ class AuthServiceTest {
     }
 
     @Test
-    void logout_withInvalidRefreshToken_fallsBackToAccessTokenTtl() {
+    void logout_withInvalidRefreshToken_fallsBackToFullRefreshWindowTtl() {
+        // Refresh token khong hop le = coi nhu khong gui; khong co dong lich su
+        // nao -> phai chan tron cua so refresh, khong duoc thu nho ve han access
+        // token (neu khong, refresh token that se song lai sau <=24h).
         when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
-        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
         when(jwtTokenProvider.validateToken("bad-refresh")).thenReturn(false);
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
 
         service.logout(1L, "access-1", "bad-refresh", null);
 
-        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMinutes(30));
+        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMillis(604_800_000L));
+    }
+
+    @Test
+    void logout_registeredSessionWithNoHistoryRow_blacklistsSidForFullRefreshWindow() {
+        // register() KHONG tao dong LoginHistory, va client logout chi gui access
+        // token. Truoc khi sua, TTL lay theo access token (<=24h) nen sau chung
+        // do thoi gian refresh token (toi 7 ngay) lai dung duoc: /auth/refresh
+        // khong can xac thuc nen bat ky ai giu token do cung hoi sinh duoc phien
+        // da dang xuat. TTL bay gio phai phu tron cua so refresh.
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.empty());
+
+        service.logout(1L, "access-1", null, null);
+
+        org.mockito.ArgumentCaptor<Duration> ttlCaptor = org.mockito.ArgumentCaptor.forClass(Duration.class);
+        verify(tokenBlacklistService).blacklist(eq("sid-1"), ttlCaptor.capture());
+        assertEquals(Duration.ofDays(7), ttlCaptor.getValue());
+        verify(jwtTokenProvider, never()).getRemainingValidity("access-1");
+    }
+
+    @Test
+    void logout_withHistoryRow_usesItsTrackedRefreshExpiryAsTtl() {
+        // Dong lich su la nguon chinh xac nhat (da gom ca cua so truot cua
+        // /auth/refresh) — uu tien hon ca han access token lan mac dinh 7 ngay.
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(5)).build();
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.of(history));
+
+        service.logout(1L, "access-1", null, null);
+
+        org.mockito.ArgumentCaptor<Duration> ttlCaptor = org.mockito.ArgumentCaptor.forClass(Duration.class);
+        verify(tokenBlacklistService).blacklist(eq("sid-1"), ttlCaptor.capture());
+        Duration ttl = ttlCaptor.getValue();
+        assertTrue(ttl.toHours() >= 119 && ttl.toHours() <= 120, "TTL ~5 ngay, thuc te: " + ttl);
+        verify(jwtTokenProvider, never()).getRefreshExpirationMs();
+        verify(jwtTokenProvider, never()).getRemainingValidity("access-1");
     }
 
     @Test
     void logout_marksMatchingLoginHistoryRowRevoked() {
         com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
-            .id(9L).sessionId("sid-1").build();
+            .id(9L).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
         when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
-        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
         when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.of(history));
 
         service.logout(1L, "access-1", null, null);
 
         assertNotNull(history.getRevokedAt());
         verify(loginHistoryRepo).save(history);
+    }
+
+    @Test
+    void logout_withHistoryRowMissingRefreshExpiry_fallsBackToFullRefreshWindow() {
+        // Dong cu (truoc migration V33) co the chua co refreshExpiresAt — khong
+        // duoc NPE, va cung khong duoc bo qua viec chan phien.
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).sessionId("sid-1").build();
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.of(history));
+
+        service.logout(1L, "access-1", null, null);
+
+        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMillis(604_800_000L));
+        assertNotNull(history.getRevokedAt());
     }
 
     @Test
@@ -124,7 +185,7 @@ class AuthServiceTest {
     @Test
     void logout_withFcmToken_deletesThatDeviceForCallingUser() {
         when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
-        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
 
         service.logout(1L, "access-1", null, "fcm-tok-1");
 
@@ -134,7 +195,7 @@ class AuthServiceTest {
     @Test
     void logout_withoutFcmToken_doesNotTouchDevices() {
         when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
-        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
 
         service.logout(1L, "access-1", null, null);
 

@@ -218,8 +218,8 @@ public class AuthService {
     // ── LOGOUT ────────────────────────────────────────────────────────────────
     // Thu hoi ngay ca access lan refresh token cua PHIEN NAY (theo sid, khong
     // phai tung chuoi token rieng le) — nen van hoat dong dung ke ca sau khi
-    // client da /auth/refresh nhieu lan. Refresh token (neu con hop le) song
-    // lau hon access token nen TTL blacklist uu tien lay tu no.
+    // client da /auth/refresh nhieu lan. TTL blacklist phai phu het doi song
+    // cua REFRESH token, xem sessionBlacklistTtl().
     //
     // Token CU mint truoc khi co claim "sid" thi khong co sid de chan theo
     // phien. Truong hop do phai quay ve co che cu: chan theo DUNG CHUOI TOKEN.
@@ -248,20 +248,44 @@ public class AuthService {
         // LoginHistory tuong ung la da thu hoi.
         String sid = accessSid != null ? accessSid : refreshSid;
         if (sid != null) {
-            Duration ttl = refreshValid
-                ? jwtTokenProvider.getRemainingValidity(refreshToken)
-                : jwtTokenProvider.getRemainingValidity(accessToken);
-            tokenBlacklistService.blacklist(sid, ttl);
-            loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
+            LoginHistory history = loginHistoryRepo.findBySessionId(sid).orElse(null);
+            tokenBlacklistService.blacklist(
+                sid, sessionBlacklistTtl(history, refreshValid ? refreshToken : null));
+            if (history != null) {
                 history.setRevokedAt(LocalDateTime.now());
                 loginHistoryRepo.save(history);
-            });
+            }
         }
         if (fcmToken != null) {
             userDeviceRepo.deleteByFcmTokenAndUserId(fcmToken, userId);
         }
         log.info("[Auth] Dang xuat: userId={} sid={} chanTokenCuTheoChuoi={} huyThietBi={}",
             userId, sid, legacyBlacklisted, fcmToken != null);
+    }
+
+    /**
+     * TTL blacklist cho CA PHIEN khi logout. Phai phu het doi song cua REFRESH
+     * token (toi 7 ngay), KHONG duoc lay theo access token (toi 24h): cung mot
+     * sid chi phoi ca hai, nen chan thieu dong nghia refresh token "song lai"
+     * ngay khi TTL ngan do het han — va /auth/refresh khong yeu cau xac thuc
+     * nen bat ky ai giu refresh token do cung dung lai duoc phien da dang xuat.
+     *
+     * Uu tien tu chinh xac nhat den an toan nhat:
+     *   1. Dong LoginHistory — han thuc te dang theo doi, da gom ca cua so truot.
+     *   2. Refresh token client gui kem (neu co) — han thuc cua chinh no.
+     *   3. Khong co ca hai: lay tron cua so refresh lam chan tren. Vi du phien
+     *      do register() tao khong he co dong LoginHistory, ma client thi chi
+     *      gui access token khi logout — khong the biet refresh token chua tung
+     *      thay con song bao lau, nen chan thua an toan hon chan thieu.
+     */
+    private Duration sessionBlacklistTtl(LoginHistory history, String validRefreshToken) {
+        if (history != null && history.getRefreshExpiresAt() != null) {
+            return Duration.between(LocalDateTime.now(), history.getRefreshExpiresAt());
+        }
+        if (validRefreshToken != null) {
+            return jwtTokenProvider.getRemainingValidity(validRefreshToken);
+        }
+        return Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs());
     }
 
     // ── PROFILE — cache 30 phút ──────────────────────────────────────────────
