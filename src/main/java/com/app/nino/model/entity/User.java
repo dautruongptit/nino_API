@@ -50,6 +50,27 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", length = 10)
+    private Gender gender;
+
+    /**
+     * Ngay sinh tach 3 phan — cung ly do voi Relative.birthMonth/birthDay/
+     * birthYear (xem V24_20260906_split_relative_birth_date.sql): nam sinh
+     * co the KHONG biet, khong dung gia tri dai dien gia nao.
+     */
+    @Column(name = "birth_month")
+    private Integer birthMonth;
+
+    @Column(name = "birth_day")
+    private Integer birthDay;
+
+    @Column(name = "birth_year")
+    private Integer birthYear;
+
     @Column(name = "language")
     @Builder.Default
     private String language = "vi";
@@ -148,5 +169,9 @@ public class User {
 
     public enum AuthProvider {
         LOCAL, GOOGLE
+    }
+
+    public enum Gender {
+        MALE, FEMALE, OTHER
     }
 }

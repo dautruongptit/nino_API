@@ -16,6 +16,11 @@ public class UserProfileResponse {
     private String email;
     private String status;
     private String avatarUrl;
+    private String phone;
+    private String gender;
+    private Integer birthMonth;
+    private Integer birthDay;
+    private Integer birthYear;
     private String language;
     private Boolean darkMode;
     private Integer totalEvents;
@@ -33,6 +38,11 @@ public class UserProfileResponse {
             .email(u.getEmail())
             .status(u.getStatus())
             .avatarUrl(u.getAvatarUrl())
+            .phone(u.getPhone())
+            .gender(u.getGender() != null ? u.getGender().name() : null)
+            .birthMonth(u.getBirthMonth())
+            .birthDay(u.getBirthDay())
+            .birthYear(u.getBirthYear())
             .language(u.getLanguage())
             .darkMode(u.getDarkMode())
             .totalEvents(u.getTotalEvents())
