@@ -16,8 +16,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -181,5 +184,82 @@ class AuthServiceTest {
         assertEquals("Pixel 8", captor.getValue().getDeviceName());
         assertNotNull(captor.getValue().getSessionId());
         assertNotNull(captor.getValue().getRefreshExpiresAt());
+    }
+
+    // ── REFRESH TOKEN — session continuity ──────────────────────────────────
+
+    @Test
+    void refreshToken_reusesSameSidForNewTokenPair() {
+        // Khong stub findBySessionId/getRefreshExpirationMs — mac dinh
+        // findBySessionId tra ve Optional.empty(), nen nhanh cap nhat
+        // refreshExpiresAt (dung getRefreshExpirationMs) khong chay toi; stub
+        // thua se bi STRICT_STUBS bao UnnecessaryStubbingException.
+        when(jwtTokenProvider.validateToken("old-refresh")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("old-refresh")).thenReturn("refresh");
+        when(jwtTokenProvider.getUserId("old-refresh")).thenReturn(1L);
+        when(jwtTokenProvider.getSid("old-refresh")).thenReturn("sid-1");
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(
+            User.builder().id(1L).email("a@b.com").roles(new java.util.HashSet<>()).build()));
+
+        service.refreshToken("old-refresh");
+
+        verify(jwtTokenProvider).generateAccessToken(eq(1L), any(), eq("sid-1"));
+        verify(jwtTokenProvider).generateRefreshToken(eq(1L), eq("sid-1"));
+    }
+
+    @Test
+    void refreshToken_updatesRefreshExpiresAtOnMatchingHistoryRow() {
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().minusDays(1)) // gia lap han cu, se duoc troi toi
+            .build();
+        when(jwtTokenProvider.validateToken("old-refresh")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("old-refresh")).thenReturn("refresh");
+        when(jwtTokenProvider.getUserId("old-refresh")).thenReturn(1L);
+        when(jwtTokenProvider.getSid("old-refresh")).thenReturn("sid-1");
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(
+            User.builder().id(1L).email("a@b.com").roles(new java.util.HashSet<>()).build()));
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.of(history));
+
+        service.refreshToken("old-refresh");
+
+        assertTrue(history.getRefreshExpiresAt().isAfter(java.time.LocalDateTime.now().plusDays(6)));
+        verify(loginHistoryRepo).save(history);
+    }
+
+    @Test
+    void refreshToken_rejectsAlreadyRevokedSession() {
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).sessionId("sid-1").revokedAt(java.time.LocalDateTime.now().minusMinutes(5))
+            .build();
+        when(jwtTokenProvider.validateToken("old-refresh")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("old-refresh")).thenReturn("refresh");
+        when(jwtTokenProvider.getUserId("old-refresh")).thenReturn(1L);
+        when(jwtTokenProvider.getSid("old-refresh")).thenReturn("sid-1");
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(
+            User.builder().id(1L).email("a@b.com").roles(new java.util.HashSet<>()).build()));
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.of(history));
+
+        assertThrows(com.app.nino.exception.UnauthorizedException.class,
+            () -> service.refreshToken("old-refresh"));
+    }
+
+    @Test
+    void refreshToken_withNoMatchingHistoryRow_stillSucceeds() {
+        // Phien tao truoc migration V33 (sessionId=null trong DB) hoac dong
+        // da bi don rac — khong duoc de viec khong tim thay dong lich su lam
+        // hong luong refresh binh thuong. getRefreshExpirationMs() KHONG duoc
+        // stub o day vi khong co dong lich su nao de cap nhat refreshExpiresAt
+        // — stub thua se bi STRICT_STUBS bao UnnecessaryStubbingException.
+        when(jwtTokenProvider.validateToken("old-refresh")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("old-refresh")).thenReturn("refresh");
+        when(jwtTokenProvider.getUserId("old-refresh")).thenReturn(1L);
+        when(jwtTokenProvider.getSid("old-refresh")).thenReturn("sid-1");
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(
+            User.builder().id(1L).email("a@b.com").roles(new java.util.HashSet<>()).build()));
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.empty());
+
+        assertDoesNotThrow(() -> service.refreshToken("old-refresh"));
     }
 }

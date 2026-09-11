@@ -161,6 +161,7 @@ public class AuthService {
     }
 
     // ── REFRESH TOKEN ─────────────────────────────────────────────────────────
+    @Transactional
     public AuthResponse refreshToken(String refreshToken) {
         if (!jwtTokenProvider.validateToken(refreshToken)
                 || !"refresh".equals(jwtTokenProvider.getTokenType(refreshToken))) {
@@ -169,13 +170,24 @@ public class AuthService {
         }
 
         Long userId = jwtTokenProvider.getUserId(refreshToken);
+        String sid = jwtTokenProvider.getSid(refreshToken);
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
-        String sid = UUID.randomUUID().toString();
+        // sid da bi thu hoi (dang xuat tu xa) nhung Redis chua kip phan anh —
+        // hang phong thu thu 2 ben canh validateToken() da kiem tra blacklist.
+        loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
+            if (history.getRevokedAt() != null) {
+                throw new UnauthorizedException("Phiên đăng nhập đã bị thu hồi");
+            }
+            history.setRefreshExpiresAt(
+                LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs())));
+            loginHistoryRepo.save(history);
+        });
+
         String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
-        log.info("[Auth] Refresh token thanh cong: userId={}", userId);
+        log.info("[Auth] Refresh token thanh cong: userId={} sid={}", userId, sid);
 
         return AuthResponse.builder()
             .accessToken(newAccessToken).refreshToken(newRefreshToken)
