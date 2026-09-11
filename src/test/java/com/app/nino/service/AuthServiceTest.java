@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -38,37 +39,56 @@ class AuthServiceTest {
     // ── LOGOUT ───────────────────────────────────────────────────────────
 
     @Test
-    void logout_blacklistsAccessToken() {
+    void logout_blacklistsSessionBySid() {
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
         when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
 
         service.logout(1L, "access-1", null, null);
 
-        verify(tokenBlacklistService).blacklist("access-1", Duration.ofMinutes(30));
+        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMinutes(30));
     }
 
     @Test
-    void logout_withRefreshToken_alsoBlacklistsRefreshToken() {
-        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+    void logout_withRefreshToken_usesRefreshTokenRemainingValidityAsTtl() {
+        // Refresh token song lau hon access token — dung han cua no lam TTL
+        // blacklist de chan ca 2 (cung sid) den tan luc refresh token het han.
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
         when(jwtTokenProvider.validateToken("refresh-1")).thenReturn(true);
         when(jwtTokenProvider.getRemainingValidity("refresh-1")).thenReturn(Duration.ofDays(7));
 
         service.logout(1L, "access-1", "refresh-1", null);
 
-        verify(tokenBlacklistService).blacklist("refresh-1", Duration.ofDays(7));
+        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofDays(7));
     }
 
     @Test
-    void logout_withInvalidRefreshToken_doesNotBlacklistIt() {
+    void logout_withInvalidRefreshToken_fallsBackToAccessTokenTtl() {
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
         when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
         when(jwtTokenProvider.validateToken("bad-refresh")).thenReturn(false);
 
         service.logout(1L, "access-1", "bad-refresh", null);
 
-        verify(tokenBlacklistService, never()).blacklist(eq("bad-refresh"), org.mockito.ArgumentMatchers.any());
+        verify(tokenBlacklistService).blacklist("sid-1", Duration.ofMinutes(30));
+    }
+
+    @Test
+    void logout_marksMatchingLoginHistoryRowRevoked() {
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).sessionId("sid-1").build();
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
+        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+        when(loginHistoryRepo.findBySessionId("sid-1")).thenReturn(java.util.Optional.of(history));
+
+        service.logout(1L, "access-1", null, null);
+
+        assertNotNull(history.getRevokedAt());
+        verify(loginHistoryRepo).save(history);
     }
 
     @Test
     void logout_withFcmToken_deletesThatDeviceForCallingUser() {
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
         when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
 
         service.logout(1L, "access-1", null, "fcm-tok-1");
@@ -78,6 +98,7 @@ class AuthServiceTest {
 
     @Test
     void logout_withoutFcmToken_doesNotTouchDevices() {
+        when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
         when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
 
         service.logout(1L, "access-1", null, null);
@@ -138,6 +159,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("pw", "hashed")).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(any(), any(), any())).thenReturn("access-1");
         when(jwtTokenProvider.generateRefreshToken(any(), any())).thenReturn("refresh-1");
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
 
         jakarta.servlet.http.HttpServletRequest httpRequest =
             org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);
@@ -157,5 +179,7 @@ class AuthServiceTest {
             org.mockito.ArgumentCaptor.forClass(com.app.nino.model.entity.LoginHistory.class);
         verify(loginHistoryRepo).save(captor.capture());
         assertEquals("Pixel 8", captor.getValue().getDeviceName());
+        assertNotNull(captor.getValue().getSessionId());
+        assertNotNull(captor.getValue().getRefreshExpiresAt());
     }
 }

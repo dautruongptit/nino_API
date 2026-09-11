@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Map;
@@ -123,14 +124,14 @@ public class AuthService {
 
         if (!user.canLogin()) {
             log.warn("[Auth] Login that bai — tai khoan chua kich hoat: userId={}", user.getId());
-            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.ACCOUNT_INACTIVE);
+            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.ACCOUNT_INACTIVE, null, null);
             throw new UnauthorizedException("Tài khoản chưa được kích hoạt");
         }
 
         if (user.isCurrentlyLocked()) {
             log.warn("[Auth] Login that bai — tai khoan dang bi khoa: userId={} unlockInMinutes={}",
                 user.getId(), user.getMinutesUntilUnlock());
-            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.ACCOUNT_LOCKED);
+            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.ACCOUNT_LOCKED, null, null);
             throw new UnauthorizedException(
                 "Tài khoản đang bị khóa, thử lại sau " + user.getMinutesUntilUnlock() + " phút");
         }
@@ -138,17 +139,18 @@ public class AuthService {
         if (user.getPasswordHash() == null
                 || !passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
             handleFailedLogin(user);
-            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.WRONG_PASSWORD);
+            saveLoginHistory(user, ip, userAgent, req.getDeviceName(), false, LoginHistory.FailureReason.WRONG_PASSWORD, null, null);
             log.warn("[Auth] Login that bai — sai mat khau: userId={} failedCount={}",
                 user.getId(), user.getFailedLoginCount());
             throw new UnauthorizedException("Email hoặc mật khẩu không đúng");
         }
 
+        String sid = UUID.randomUUID().toString();
+        LocalDateTime refreshExpiresAt = LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs()));
         handleSuccessLogin(user, ip);
-        saveLoginHistory(user, ip, userAgent, req.getDeviceName(), true, null);
+        saveLoginHistory(user, ip, userAgent, req.getDeviceName(), true, null, sid, refreshExpiresAt);
         log.info("[Auth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
-        String sid = UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
 
@@ -182,22 +184,35 @@ public class AuthService {
     }
 
     // ── LOGOUT ────────────────────────────────────────────────────────────────
-    // Thu hoi ngay access token dang goi request nay (va refresh token neu
-    // client gui kem) thay vi cho no tu het han thu dong (toi 7 ngay); huy
-    // dang ky thiet bi (fcmToken) neu client gui kem de dung push ngay lap tuc.
+    // Thu hoi ngay ca access lan refresh token cua PHIEN NAY (theo sid, khong
+    // phai tung chuoi token rieng le) — nen van hoat dong dung ke ca sau khi
+    // client da /auth/refresh nhieu lan. Refresh token (neu con hop le) song
+    // lau hon access token nen TTL blacklist uu tien lay tu no.
     @Transactional
     public void logout(Long userId, String accessToken, String refreshToken, String fcmToken) {
+        String sid = null;
         if (accessToken != null) {
-            tokenBlacklistService.blacklist(accessToken, jwtTokenProvider.getRemainingValidity(accessToken));
+            sid = jwtTokenProvider.getSid(accessToken);
         }
-        if (refreshToken != null && jwtTokenProvider.validateToken(refreshToken)) {
-            tokenBlacklistService.blacklist(refreshToken, jwtTokenProvider.getRemainingValidity(refreshToken));
+        Duration ttl = Duration.ZERO;
+        boolean refreshValid = refreshToken != null && jwtTokenProvider.validateToken(refreshToken);
+        if (refreshValid) {
+            if (sid == null) sid = jwtTokenProvider.getSid(refreshToken);
+            ttl = jwtTokenProvider.getRemainingValidity(refreshToken);
+        } else if (accessToken != null) {
+            ttl = jwtTokenProvider.getRemainingValidity(accessToken);
+        }
+        if (sid != null) {
+            tokenBlacklistService.blacklist(sid, ttl);
+            loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
+                history.setRevokedAt(LocalDateTime.now());
+                loginHistoryRepo.save(history);
+            });
         }
         if (fcmToken != null) {
             userDeviceRepo.deleteByFcmTokenAndUserId(fcmToken, userId);
         }
-        log.info("[Auth] Dang xuat: userId={} thuHoiAccessToken={} thuHoiRefreshToken={} huyThietBi={}",
-            userId, accessToken != null, refreshToken != null, fcmToken != null);
+        log.info("[Auth] Dang xuat: userId={} sid={} huyThietBi={}", userId, sid, fcmToken != null);
     }
 
     // ── PROFILE — cache 30 phút ──────────────────────────────────────────────
@@ -333,7 +348,8 @@ public class AuthService {
     }
 
     private void saveLoginHistory(User user, String ip, String userAgent, String deviceName,
-                                   boolean success, LoginHistory.FailureReason reason) {
+                                   boolean success, LoginHistory.FailureReason reason,
+                                   String sessionId, LocalDateTime refreshExpiresAt) {
         LoginHistory history = LoginHistory.builder()
             .user(user)
             .ipAddress(ip)
@@ -344,6 +360,8 @@ public class AuthService {
             .browser(DeviceParser.parseBrowser(userAgent))
             .isSuccess(success)
             .failureReason(reason)
+            .sessionId(sessionId)
+            .refreshExpiresAt(refreshExpiresAt)
             .build();
         loginHistoryRepo.save(history);
     }
