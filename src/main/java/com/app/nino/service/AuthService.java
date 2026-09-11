@@ -97,8 +97,9 @@ public class AuthService {
         userRepo.save(user);
         log.info("[Auth] Dang ky thanh cong: userId={} email={}", user.getId(), user.getEmail());
 
-        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+        String sid = UUID.randomUUID().toString();
+        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
 
         return AuthResponse.builder()
             .accessToken(accessToken).refreshToken(refreshToken)
@@ -147,8 +148,9 @@ public class AuthService {
         saveLoginHistory(user, ip, userAgent, req.getDeviceName(), true, null);
         log.info("[Auth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
-        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+        String sid = UUID.randomUUID().toString();
+        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
 
         return AuthResponse.builder()
             .accessToken(accessToken).refreshToken(refreshToken)
@@ -168,8 +170,9 @@ public class AuthService {
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
-        String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles());
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+        String sid = UUID.randomUUID().toString();
+        String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
         log.info("[Auth] Refresh token thanh cong: userId={}", userId);
 
         return AuthResponse.builder()

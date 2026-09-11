@@ -53,8 +53,8 @@ class GoogleAuthServiceTest {
     @BeforeEach
     void setUp() throws GeneralSecurityException, java.io.IOException {
         lenient().when(googleIdTokenVerifier.verify(anyString())).thenReturn(googleIdToken);
-        lenient().when(jwtTokenProvider.generateAccessToken(any(), any())).thenReturn("access-token");
-        lenient().when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh-token");
+        lenient().when(jwtTokenProvider.generateAccessToken(any(), any(), any())).thenReturn("access-token");
+        lenient().when(jwtTokenProvider.generateRefreshToken(any(), any())).thenReturn("refresh-token");
     }
 
     @Test

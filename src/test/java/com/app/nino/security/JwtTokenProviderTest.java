@@ -35,24 +35,51 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    void validateToken_returnsFalse_whenBlacklisted() {
-        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()));
-        when(tokenBlacklistService.isBlacklisted(token)).thenReturn(true);
+    void generateAccessToken_embedsGivenSid() {
+        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()), "sid-1");
+
+        assertEquals("sid-1", provider.getSid(token));
+    }
+
+    @Test
+    void generateRefreshToken_embedsGivenSid() {
+        String token = provider.generateRefreshToken(1L, "sid-1");
+
+        assertEquals("sid-1", provider.getSid(token));
+    }
+
+    @Test
+    void validateToken_returnsFalse_whenSidBlacklisted() {
+        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()), "sid-1");
+        when(tokenBlacklistService.isBlacklisted("sid-1")).thenReturn(true);
 
         assertFalse(provider.validateToken(token));
     }
 
     @Test
-    void validateToken_returnsTrue_whenNotBlacklisted() {
-        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()));
-        when(tokenBlacklistService.isBlacklisted(token)).thenReturn(false);
+    void validateToken_returnsTrue_whenSidNotBlacklisted() {
+        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()), "sid-1");
+        when(tokenBlacklistService.isBlacklisted("sid-1")).thenReturn(false);
 
         assertTrue(provider.validateToken(token));
     }
 
     @Test
+    void validateToken_blacklistingOneSid_alsoRejectsARefreshedTokenSharingIt() {
+        // Day chinh la ly do dung "sid" thay vi chan theo dung chuoi token: 1
+        // token MOI (gia lap ket qua cua /auth/refresh) mang cung sid van bi
+        // chan, du chua bao gio duoc dua vao blacklist truc tiep.
+        String original = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()), "sid-1");
+        String rotated = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()), "sid-1");
+        when(tokenBlacklistService.isBlacklisted("sid-1")).thenReturn(true);
+
+        assertFalse(provider.validateToken(original));
+        assertFalse(provider.validateToken(rotated));
+    }
+
+    @Test
     void getRemainingValidity_returnsApproximatelyConfiguredExpiration() {
-        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()));
+        String token = provider.generateAccessToken(1L, Set.of(Role.builder().name("ROLE_USER").build()), "sid-1");
 
         Duration remaining = provider.getRemainingValidity(token);
 
@@ -67,11 +94,16 @@ class JwtTokenProviderTest {
         // (sliding window) — nen mien la con dung app it nhat 1 lan/7 ngay,
         // refresh token khong bao gio thuc su het han; ngung dung qua 7 ngay
         // thi refresh token cu se het han that.
-        String refreshToken = provider.generateRefreshToken(1L);
+        String refreshToken = provider.generateRefreshToken(1L, "sid-1");
 
         assertEquals("refresh", provider.getTokenType(refreshToken));
         Duration remaining = provider.getRemainingValidity(refreshToken);
         assertTrue(remaining.toMillis() > REFRESH_MS - 5000);
         assertTrue(remaining.toMillis() <= REFRESH_MS);
+    }
+
+    @Test
+    void getRefreshExpirationMs_returnsConfiguredValue() {
+        assertEquals(REFRESH_MS, provider.getRefreshExpirationMs());
     }
 }

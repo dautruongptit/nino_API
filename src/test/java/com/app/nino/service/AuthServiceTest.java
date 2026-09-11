@@ -136,8 +136,8 @@ class AuthServiceTest {
             .passwordHash("hashed").status("ACT").roles(new java.util.HashSet<>()).build();
         when(userRepo.findByEmail("a@b.com")).thenReturn(java.util.Optional.of(user));
         when(passwordEncoder.matches("pw", "hashed")).thenReturn(true);
-        when(jwtTokenProvider.generateAccessToken(any(), any())).thenReturn("access-1");
-        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh-1");
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any())).thenReturn("access-1");
+        when(jwtTokenProvider.generateRefreshToken(any(), any())).thenReturn("refresh-1");
 
         jakarta.servlet.http.HttpServletRequest httpRequest =
             org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);

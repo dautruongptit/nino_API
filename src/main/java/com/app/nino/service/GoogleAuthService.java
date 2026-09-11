@@ -87,8 +87,9 @@ public class GoogleAuthService {
         saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"), deviceName);
         log.info("[GoogleAuth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
-        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+        String sid = java.util.UUID.randomUUID().toString();
+        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
 
         return AuthResponse.builder()
             .accessToken(accessToken).refreshToken(refreshToken)

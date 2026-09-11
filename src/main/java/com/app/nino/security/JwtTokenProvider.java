@@ -36,36 +36,39 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
-    public String generateAccessToken(Long userId, Set<Role> roles) {
+    public String generateAccessToken(Long userId, Set<Role> roles, String sid) {
         List<String> roleNames = roles.stream().map(Role::getName).collect(Collectors.toList());
 
         String token = Jwts.builder()
             .subject(String.valueOf(userId))
             .claim("roles", roleNames)
             .claim("type", "access")
+            .claim("sid", sid)
             .issuedAt(new Date())
             .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
             .signWith(getSigningKey())
             .compact();
-        log.debug("[JWT] Tao access token: userId={} roles={} expiresInMs={}", userId, roleNames, jwtExpiration);
+        log.debug("[JWT] Tao access token: userId={} roles={} sid={} expiresInMs={}", userId, roleNames, sid, jwtExpiration);
         return token;
     }
 
-    public String generateRefreshToken(Long userId) {
+    public String generateRefreshToken(Long userId, String sid) {
         String token = Jwts.builder()
             .subject(String.valueOf(userId))
             .claim("type", "refresh")
+            .claim("sid", sid)
             .issuedAt(new Date())
             .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
             .signWith(getSigningKey())
             .compact();
-        log.debug("[JWT] Tao refresh token: userId={} expiresInMs={}", userId, refreshExpiration);
+        log.debug("[JWT] Tao refresh token: userId={} sid={} expiresInMs={}", userId, sid, refreshExpiration);
         return token;
     }
 
     public boolean validateToken(String token) {
+        Claims claims;
         try {
-            Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(token);
+            claims = Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(token).getPayload();
         } catch (ExpiredJwtException e) {
             log.warn("[JWT] Token da het han: subject={}", e.getClaims().getSubject());
             return false;
@@ -73,11 +76,27 @@ public class JwtTokenProvider {
             log.warn("[JWT] Token khong hop le: {}", e.getMessage());
             return false;
         }
-        if (tokenBlacklistService.isBlacklisted(token)) {
-            log.warn("[JWT] Token da bi thu hoi (logout)");
+        String sid = claims.get("sid", String.class);
+        if (sid != null && tokenBlacklistService.isBlacklisted(sid)) {
+            log.warn("[JWT] Phien da bi thu hoi: sid={}", sid);
             return false;
         }
         return true;
+    }
+
+    /** Claim "sid" — dinh danh phien dang nhap, giu nguyen qua moi lan
+     *  refresh (khac voi token thay doi moi lan cap). Dung de blacklist ca
+     *  access lan refresh token cua 1 phien chi bang 1 lan ghi. */
+    public String getSid(String token) {
+        Claims claims = Jwts.parser().verifyWith(getSigningKey()).build()
+            .parseSignedClaims(token).getPayload();
+        return claims.get("sid", String.class);
+    }
+
+    /** De AuthService/GoogleAuthService tinh refreshExpiresAt luc luu
+     *  LoginHistory ma khong phai tu khai bao lai @Value nay o noi khac. */
+    public long getRefreshExpirationMs() {
+        return refreshExpiration;
     }
 
     /** Thoi gian con lai truoc khi token tu het han — dung de dat TTL blacklist khi logout. */
