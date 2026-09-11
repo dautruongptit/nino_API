@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -104,6 +105,7 @@ class GoogleAuthServiceTest {
             .authProvider(User.AuthProvider.GOOGLE).status("ACT")
             .roles(new HashSet<>()).build();
         when(userRepo.findByGoogleId("g-1")).thenReturn(Optional.of(user));
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
 
         service.loginWithGoogle("id-token", httpRequest, "iPhone 15 Pro");
 
@@ -111,5 +113,7 @@ class GoogleAuthServiceTest {
             org.mockito.ArgumentCaptor.forClass(com.app.nino.model.entity.LoginHistory.class);
         verify(loginHistoryRepo).save(captor.capture());
         assertEquals("iPhone 15 Pro", captor.getValue().getDeviceName());
+        assertNotNull(captor.getValue().getSessionId());
+        assertNotNull(captor.getValue().getRefreshExpiresAt());
     }
 }

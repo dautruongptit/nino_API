@@ -83,11 +83,13 @@ public class GoogleAuthService {
         }
 
         String ip = DeviceParser.getClientIp(httpRequest);
+        String sid = java.util.UUID.randomUUID().toString();
+        java.time.LocalDateTime refreshExpiresAt =
+            java.time.LocalDateTime.now().plus(java.time.Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs()));
         handleSuccessLogin(user, ip);
-        saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"), deviceName);
+        saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"), deviceName, sid, refreshExpiresAt);
         log.info("[GoogleAuth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
-        String sid = java.util.UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
 
@@ -141,7 +143,8 @@ public class GoogleAuthService {
         userRepo.save(user);
     }
 
-    private void saveLoginHistory(User user, String ip, String userAgent, String deviceName) {
+    private void saveLoginHistory(User user, String ip, String userAgent, String deviceName,
+                                   String sessionId, java.time.LocalDateTime refreshExpiresAt) {
         LoginHistory history = LoginHistory.builder()
             .user(user)
             .ipAddress(ip)
@@ -151,6 +154,8 @@ public class GoogleAuthService {
             .os(DeviceParser.parseOs(userAgent))
             .browser(DeviceParser.parseBrowser(userAgent))
             .isSuccess(true)
+            .sessionId(sessionId)
+            .refreshExpiresAt(refreshExpiresAt)
             .build();
         loginHistoryRepo.save(history);
     }
