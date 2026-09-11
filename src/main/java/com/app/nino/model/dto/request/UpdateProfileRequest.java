@@ -15,4 +15,14 @@ public class UpdateProfileRequest {
     @NotBlank(message = "fullName khong duoc de trong")
     @Size(min = 2, max = 100)
     private String fullName;
+
+    private String phone;
+
+    private String gender;      // MALE, FEMALE, OTHER
+
+    // Ngay sinh tach 3 phan — xem User.birthMonth/birthDay/birthYear.
+    // birthYear null = khong ro nam sinh (khong dung gia tri dai dien nao).
+    private Integer birthMonth;
+    private Integer birthDay;
+    private Integer birthYear;
 }

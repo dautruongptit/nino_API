@@ -33,11 +33,14 @@ public class AppConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                    .allowedOriginPatterns("*", "http://nino.thongtinchinhhieu.site", "http://nino-api.thongtinchinhhieu.site")
+                    .allowedOriginPatterns("*", "http://nino.thongtinchinhhieu.site", "http://nino-api.thongtinchinhhieu.site",
+                        "http://100.106.5.35:*", "http://192.22.12.103:*")
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                     .allowedHeaders("*")
                     .allowCredentials(false);
                 // Production: thay allowedOriginPatterns("*") bang domain cu the
+                // "http://100.106.5.35:*" — IP Tailscale cua may test, du moi port
+                // "http://192.22.12.103:*" — IP LAN/may test, du moi port
             }
         };
     }

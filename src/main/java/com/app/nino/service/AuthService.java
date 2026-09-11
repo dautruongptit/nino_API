@@ -211,6 +211,11 @@ public class AuthService {
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         user.setFullName(req.getFullName());
+        user.setPhone(req.getPhone());
+        user.setGender(req.getGender() != null ? User.Gender.valueOf(req.getGender()) : null);
+        user.setBirthMonth(req.getBirthMonth());
+        user.setBirthDay(req.getBirthDay());
+        user.setBirthYear(req.getBirthYear());
         return UserProfileResponse.from(userRepo.save(user));
     }
 

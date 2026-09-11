@@ -85,6 +85,49 @@ class AuthServiceTest {
         verifyNoInteractions(userDeviceRepo);
     }
 
+    // ── UPDATE PROFILE — phone/gender/ngay sinh ─────────────────────────────
+
+    @Test
+    void updateProfile_setsPhoneGenderAndBirthDate() {
+        User user = User.builder().id(1L).email("a@b.com").fullName("Cu ten").build();
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        com.app.nino.model.dto.request.UpdateProfileRequest req =
+            new com.app.nino.model.dto.request.UpdateProfileRequest();
+        req.setFullName("Ten moi");
+        req.setPhone("0912345678");
+        req.setGender("FEMALE");
+        req.setBirthMonth(5);
+        req.setBirthDay(20);
+        req.setBirthYear(1995);
+
+        var result = service.updateProfile(1L, req);
+
+        assertEquals("0912345678", result.getPhone());
+        assertEquals("FEMALE", result.getGender());
+        assertEquals(5, result.getBirthMonth());
+        assertEquals(20, result.getBirthDay());
+        assertEquals(1995, result.getBirthYear());
+    }
+
+    @Test
+    void updateProfile_withNullGenderAndBirthDate_clearsThem() {
+        User user = User.builder().id(1L).email("a@b.com").fullName("Cu ten")
+            .gender(User.Gender.MALE).birthMonth(1).birthDay(2).birthYear(1990).build();
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        com.app.nino.model.dto.request.UpdateProfileRequest req =
+            new com.app.nino.model.dto.request.UpdateProfileRequest();
+        req.setFullName("Ten moi");
+
+        var result = service.updateProfile(1L, req);
+
+        assertEquals(null, result.getGender());
+        assertEquals(null, result.getBirthMonth());
+    }
+
     // ── LOGIN — device name capture ─────────────────────────────────────────
 
     @Test
