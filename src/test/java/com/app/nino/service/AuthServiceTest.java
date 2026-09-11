@@ -368,4 +368,25 @@ class AuthServiceTest {
         assertThrows(com.app.nino.exception.ResourceNotFoundException.class,
             () -> service.revokeLoginHistorySession(1L, 9L));
     }
+
+    @Test
+    void revokeLoginHistorySession_missingRowAndWrongOwnerRow_produceIdenticalErrorMessage() {
+        // Ly do test nay ton tai: khong duoc de ke tan cong phan biet "id
+        // khong ton tai" voi "id ton tai nhung khong phai cua minh" qua noi
+        // dung thong bao loi — se lo duoc su ton tai cua row nguoi khac. Neu
+        // sau nay ai do sua message rieng cho 1 trong 2 nhanh, test nay phai
+        // fail ngay.
+        when(loginHistoryRepo.findById(9L)).thenReturn(java.util.Optional.empty());
+        Exception missingRowEx = assertThrows(com.app.nino.exception.ResourceNotFoundException.class,
+            () -> service.revokeLoginHistorySession(1L, 9L));
+
+        com.app.nino.model.entity.LoginHistory otherUsersHistory = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).user(User.builder().id(2L).build()).isSuccess(true).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+        when(loginHistoryRepo.findById(9L)).thenReturn(java.util.Optional.of(otherUsersHistory));
+        Exception wrongOwnerEx = assertThrows(com.app.nino.exception.ResourceNotFoundException.class,
+            () -> service.revokeLoginHistorySession(1L, 9L));
+
+        assertEquals(missingRowEx.getMessage(), wrongOwnerEx.getMessage());
+    }
 }
