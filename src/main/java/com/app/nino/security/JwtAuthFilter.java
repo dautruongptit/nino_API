@@ -64,6 +64,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 // filter nam TRUOC ca chain security - doc lai duoc userId sau khi
                 // filterChain.doFilter() da chay xong.
                 request.setAttribute("authUserId", userId);
+                request.setAttribute("authSid", jwtTokenProvider.getSid(token));
 
                 log.debug("[JwtAuthFilter] Xac thuc thanh cong: userId={} roles={} uri={}",
                     userId, roles, request.getRequestURI());

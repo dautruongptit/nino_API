@@ -302,9 +302,20 @@ public class AuthService {
     }
 
     // ── LOGIN HISTORY ─────────────────────────────────────────────────────────
-    public Page<LoginHistoryResponse> getLoginHistory(Long userId, int page, int size) {
+    public Page<LoginHistoryResponse> getLoginHistory(Long userId, int page, int size, String currentSid) {
         return loginHistoryRepo.findByUserIdOrderByLoginAtDesc(userId, PageRequest.of(page, size))
-            .map(LoginHistoryResponse::from);
+            .map(h -> LoginHistoryResponse.from(h, isActive(h), currentSid));
+    }
+
+    /** true neu phien nay con "Dang xuat tu xa" duoc — dang nhap thanh cong,
+     *  co sid (dong tao tu migration V33 tro di), chua bi thu hoi, va refresh
+     *  token chua het han tu nhien. */
+    private boolean isActive(LoginHistory h) {
+        return Boolean.TRUE.equals(h.getIsSuccess())
+            && h.getSessionId() != null
+            && h.getRevokedAt() == null
+            && h.getRefreshExpiresAt() != null
+            && h.getRefreshExpiresAt().isAfter(LocalDateTime.now());
     }
 
     // ── GOOGLE CALENDAR (placeholder — chưa implement logic đồng bộ thật) ──────

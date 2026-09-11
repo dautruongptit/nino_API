@@ -18,6 +18,7 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -280,5 +281,40 @@ class AuthServiceTest {
         assertDoesNotThrow(() -> service.refreshToken("old-refresh"));
 
         verifyNoInteractions(loginHistoryRepo);
+    }
+
+    // ── LOGIN HISTORY — active/current-session flags ────────────────────────
+
+    @Test
+    void getLoginHistory_flagsActiveAndCurrentSessionCorrectly() {
+        com.app.nino.model.entity.LoginHistory activeOther = com.app.nino.model.entity.LoginHistory.builder()
+            .id(1L).isSuccess(true).sessionId("sid-other")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+        com.app.nino.model.entity.LoginHistory activeCurrent = com.app.nino.model.entity.LoginHistory.builder()
+            .id(2L).isSuccess(true).sessionId("sid-current")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+        com.app.nino.model.entity.LoginHistory expired = com.app.nino.model.entity.LoginHistory.builder()
+            .id(3L).isSuccess(true).sessionId("sid-expired")
+            .refreshExpiresAt(java.time.LocalDateTime.now().minusDays(1)).build();
+        com.app.nino.model.entity.LoginHistory revoked = com.app.nino.model.entity.LoginHistory.builder()
+            .id(4L).isSuccess(true).sessionId("sid-revoked")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3))
+            .revokedAt(java.time.LocalDateTime.now().minusMinutes(5)).build();
+        com.app.nino.model.entity.LoginHistory failed = com.app.nino.model.entity.LoginHistory.builder()
+            .id(5L).isSuccess(false).build();
+
+        when(loginHistoryRepo.findByUserIdOrderByLoginAtDesc(eq(1L), any()))
+            .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                java.util.List.of(activeOther, activeCurrent, expired, revoked, failed)));
+
+        var result = service.getLoginHistory(1L, 0, 20, "sid-current").getContent();
+
+        assertTrue(result.get(0).getIsActive());
+        assertFalse(result.get(0).getIsCurrentSession());
+        assertTrue(result.get(1).getIsActive());
+        assertTrue(result.get(1).getIsCurrentSession());
+        assertFalse(result.get(2).getIsActive());
+        assertFalse(result.get(3).getIsActive());
+        assertFalse(result.get(4).getIsActive());
     }
 }

@@ -58,9 +58,10 @@ public class UserController {
     @Operation(summary = "Lịch sử đăng nhập của mình")
     public ResponseEntity<BaseResponse<?>> getMyLoginHistory(
             @AuthenticationPrincipal Long userId,
+            @RequestAttribute(name = "authSid", required = false) String currentSid,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(BaseResponse.success(authService.getLoginHistory(userId, page, size)));
+        return ResponseEntity.ok(BaseResponse.success(authService.getLoginHistory(userId, page, size, currentSid)));
     }
 
     // ── ADMIN ────────────────────────────────────────────────────────────────
@@ -104,8 +105,9 @@ public class UserController {
     @Operation(summary = "[Admin] Lịch sử đăng nhập của user bất kỳ")
     public ResponseEntity<BaseResponse<?>> getUserLoginHistory(
             @PathVariable Long id,
+            @RequestAttribute(name = "authSid", required = false) String currentSid,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(BaseResponse.success(authService.getLoginHistory(id, page, size)));
+        return ResponseEntity.ok(BaseResponse.success(authService.getLoginHistory(id, page, size, currentSid)));
     }
 }

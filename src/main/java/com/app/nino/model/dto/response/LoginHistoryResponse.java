@@ -18,8 +18,10 @@ public class LoginHistoryResponse {
     private Boolean       isSuccess;
     private String        failureReason;
     private LocalDateTime loginAt;
+    private Boolean       isActive;         // Con the "Dang xuat" tu xa duoc khong — xem AuthService.isActive()
+    private Boolean       isCurrentSession; // La chinh phien dang goi request nay
 
-    public static LoginHistoryResponse from(LoginHistory h) {
+    public static LoginHistoryResponse from(LoginHistory h, boolean active, String currentSid) {
         return LoginHistoryResponse.builder()
             .id(h.getId())
             .ipAddress(h.getIpAddress())
@@ -31,6 +33,8 @@ public class LoginHistoryResponse {
             .isSuccess(h.getIsSuccess())
             .failureReason(h.getFailureReason() != null ? h.getFailureReason().name() : null)
             .loginAt(h.getLoginAt())
+            .isActive(active)
+            .isCurrentSession(currentSid != null && currentSid.equals(h.getSessionId()))
             .build();
     }
 }
