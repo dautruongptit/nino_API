@@ -64,6 +64,16 @@ public class UserController {
         return ResponseEntity.ok(BaseResponse.success(authService.getLoginHistory(userId, page, size, currentSid)));
     }
 
+    @PostMapping("/me/login-history/{id}/logout")
+    @Operation(summary = "Đăng xuất một thiết bị/phiên trước đó",
+               description = "Thu hồi ngay lập tức phiên đăng nhập tương ứng với dòng lịch sử này.")
+    public ResponseEntity<BaseResponse<?>> logoutLoginHistorySession(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long id) {
+        authService.revokeLoginHistorySession(userId, id);
+        return ResponseEntity.ok(BaseResponse.success(null, "Đã đăng xuất thiết bị"));
+    }
+
     // ── ADMIN ────────────────────────────────────────────────────────────────
 
     @GetMapping

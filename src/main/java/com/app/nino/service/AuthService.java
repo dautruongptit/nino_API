@@ -318,6 +318,26 @@ public class AuthService {
             && h.getRefreshExpiresAt().isAfter(LocalDateTime.now());
     }
 
+    @Transactional
+    public void revokeLoginHistorySession(Long userId, Long historyId) {
+        LoginHistory history = loginHistoryRepo.findById(historyId)
+            .orElseThrow(() -> new ResourceNotFoundException("LoginHistory", historyId));
+        // Tra ve loi "khong ton tai" giong het truong hop id sai — khong lo
+        // cho ke tan cong biet dong nay co ton tai nhung thuoc user khac.
+        if (!history.getUser().getId().equals(userId)) {
+            throw new ResourceNotFoundException("LoginHistory", historyId);
+        }
+        if (!isActive(history)) {
+            throw new BadRequestException("Phiên đăng nhập này đã hết hạn hoặc đã đăng xuất");
+        }
+        Duration ttl = Duration.between(LocalDateTime.now(), history.getRefreshExpiresAt());
+        tokenBlacklistService.blacklist(history.getSessionId(), ttl);
+        history.setRevokedAt(LocalDateTime.now());
+        loginHistoryRepo.save(history);
+        log.info("[Auth] Dang xuat tu xa qua Lich su dang nhap: userId={} historyId={} sid={}",
+            userId, historyId, history.getSessionId());
+    }
+
     // ── GOOGLE CALENDAR (placeholder — chưa implement logic đồng bộ thật) ──────
     @Transactional
     public void connectGoogleCalendar(Long userId, String authCode) {

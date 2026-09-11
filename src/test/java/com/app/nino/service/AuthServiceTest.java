@@ -317,4 +317,55 @@ class AuthServiceTest {
         assertFalse(result.get(3).getIsActive());
         assertFalse(result.get(4).getIsActive());
     }
+
+    // ── REMOTE LOGOUT FROM LOGIN HISTORY ─────────────────────────────────────
+
+    @Test
+    void revokeLoginHistorySession_blacklistsSidWithRemainingTtlAndMarksRevoked() {
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).user(User.builder().id(1L).build()).isSuccess(true).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+        when(loginHistoryRepo.findById(9L)).thenReturn(java.util.Optional.of(history));
+
+        service.revokeLoginHistorySession(1L, 9L);
+
+        org.mockito.ArgumentCaptor<Duration> ttlCaptor = org.mockito.ArgumentCaptor.forClass(Duration.class);
+        verify(tokenBlacklistService).blacklist(eq("sid-1"), ttlCaptor.capture());
+        assertTrue(ttlCaptor.getValue().toDays() >= 2); // ~3 ngay, cho phep sai so nho
+        assertNotNull(history.getRevokedAt());
+        verify(loginHistoryRepo).save(history);
+    }
+
+    @Test
+    void revokeLoginHistorySession_rejectsRowBelongingToAnotherUser() {
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).user(User.builder().id(2L).build()).isSuccess(true).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+        when(loginHistoryRepo.findById(9L)).thenReturn(java.util.Optional.of(history));
+
+        assertThrows(com.app.nino.exception.ResourceNotFoundException.class,
+            () -> service.revokeLoginHistorySession(1L, 9L));
+        verifyNoInteractions(tokenBlacklistService);
+    }
+
+    @Test
+    void revokeLoginHistorySession_rejectsAlreadyInactiveRow() {
+        com.app.nino.model.entity.LoginHistory history = com.app.nino.model.entity.LoginHistory.builder()
+            .id(9L).user(User.builder().id(1L).build()).isSuccess(true).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().minusDays(1)) // da het han
+            .build();
+        when(loginHistoryRepo.findById(9L)).thenReturn(java.util.Optional.of(history));
+
+        assertThrows(com.app.nino.exception.BadRequestException.class,
+            () -> service.revokeLoginHistorySession(1L, 9L));
+        verifyNoInteractions(tokenBlacklistService);
+    }
+
+    @Test
+    void revokeLoginHistorySession_rejectsMissingRow() {
+        when(loginHistoryRepo.findById(9L)).thenReturn(java.util.Optional.empty());
+
+        assertThrows(com.app.nino.exception.ResourceNotFoundException.class,
+            () -> service.revokeLoginHistorySession(1L, 9L));
+    }
 }
