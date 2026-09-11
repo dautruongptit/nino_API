@@ -91,6 +91,37 @@ class AuthServiceTest {
     }
 
     @Test
+    void logout_withLegacyAccessTokenWithoutSid_blacklistsRawTokenString() {
+        // Token cu (mint truoc khi co claim "sid") -> getSid() tra ve null.
+        // Truoc khi sua, nhanh blacklist bi bo qua hoan toan: logout tra 200 OK
+        // nhung token van con hieu luc. Phai quay ve chan theo dung chuoi token.
+        when(jwtTokenProvider.getSid("access-1")).thenReturn(null);
+        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+
+        service.logout(1L, "access-1", null, null);
+
+        verify(tokenBlacklistService).blacklist("access-1", Duration.ofMinutes(30));
+        verifyNoMoreInteractions(tokenBlacklistService);
+        verifyNoInteractions(loginHistoryRepo);
+    }
+
+    @Test
+    void logout_withLegacyRefreshTokenWithoutSid_blacklistsRawRefreshTokenToo() {
+        // Moi token duoc xet doc lap: ca access lan refresh token cu deu phai
+        // bi chan theo chuoi token cua chinh no.
+        when(jwtTokenProvider.getSid("access-1")).thenReturn(null);
+        when(jwtTokenProvider.getSid("refresh-1")).thenReturn(null);
+        when(jwtTokenProvider.validateToken("refresh-1")).thenReturn(true);
+        when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
+        when(jwtTokenProvider.getRemainingValidity("refresh-1")).thenReturn(Duration.ofDays(7));
+
+        service.logout(1L, "access-1", "refresh-1", null);
+
+        verify(tokenBlacklistService).blacklist("access-1", Duration.ofMinutes(30));
+        verify(tokenBlacklistService).blacklist("refresh-1", Duration.ofDays(7));
+    }
+
+    @Test
     void logout_withFcmToken_deletesThatDeviceForCallingUser() {
         when(jwtTokenProvider.getSid("access-1")).thenReturn("sid-1");
         when(jwtTokenProvider.getRemainingValidity("access-1")).thenReturn(Duration.ofMinutes(30));
@@ -265,12 +296,12 @@ class AuthServiceTest {
     }
 
     @Test
-    void refreshToken_withNullSid_skipsHistoryLookupEntirely() {
-        // Token cu tao truoc khi co claim "sid" (Task 2) — getSid() tra ve
-        // null. PHAI bo qua hoan toan buoc tra LoginHistory: goi
-        // findBySessionId(null) tren repository THAT (khong mock) se nem
-        // IncorrectResultSizeDataAccessException vi Hibernate dich "= NULL"
-        // thanh "IS NULL", khop MOI dong co session_id null trong bang.
+    void refreshToken_withNullSid_mintsFreshSidForNewTokenPair() {
+        // Token cu tao truoc khi co claim "sid" — getSid() tra ve null. Truoc
+        // khi sua, null do duoc truyen thang vao generateAccessToken/
+        // generateRefreshToken; JJWT bo claim null nen cap token MOI cung khong
+        // co sid — phien khong bao gio thu hoi duoc (refresh la cua so truot 7
+        // ngay). Bay gio phai sinh sid moi: cap token vua tao luon co sid.
         when(jwtTokenProvider.validateToken("old-refresh")).thenReturn(true);
         when(jwtTokenProvider.getTokenType("old-refresh")).thenReturn("refresh");
         when(jwtTokenProvider.getUserId("old-refresh")).thenReturn(1L);
@@ -280,7 +311,21 @@ class AuthServiceTest {
 
         assertDoesNotThrow(() -> service.refreshToken("old-refresh"));
 
-        verifyNoInteractions(loginHistoryRepo);
+        org.mockito.ArgumentCaptor<String> accessSid = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.ArgumentCaptor<String> refreshSid = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(jwtTokenProvider).generateAccessToken(eq(1L), any(), accessSid.capture());
+        verify(jwtTokenProvider).generateRefreshToken(eq(1L), refreshSid.capture());
+
+        assertNotNull(accessSid.getValue());
+        assertEquals(accessSid.getValue(), refreshSid.getValue()); // cung 1 phien
+        assertDoesNotThrow(() -> java.util.UUID.fromString(accessSid.getValue()));
+        // Sid vua sinh khong khop dong nao — va quan trong la KHONG bao gio goi
+        // findBySessionId(null): tren repository THAT, Hibernate dich "= NULL"
+        // thanh "IS NULL" va nem IncorrectResultSizeDataAccessException khi co
+        // nhieu hon 1 dong session_id null.
+        verify(loginHistoryRepo).findBySessionId(accessSid.getValue());
+        verify(loginHistoryRepo, never()).findBySessionId(null);
+        verifyNoMoreInteractions(loginHistoryRepo);
     }
 
     // ── LOGIN HISTORY — active/current-session flags ────────────────────────

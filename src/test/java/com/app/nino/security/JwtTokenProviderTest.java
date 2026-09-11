@@ -23,12 +23,12 @@ class JwtTokenProviderTest {
 
     private static final long ACCESS_MS  = 3600_000L;   // 1h
     private static final long REFRESH_MS = 604_800_000L; // 7 ngay
+    private static final String SECRET = "test-secret-key-must-be-at-least-32-bytes-long-for-hs256";
 
     @BeforeEach
     void setUp() {
         provider = new JwtTokenProvider();
-        ReflectionTestUtils.setField(provider, "jwtSecret",
-            "test-secret-key-must-be-at-least-32-bytes-long-for-hs256");
+        ReflectionTestUtils.setField(provider, "jwtSecret", SECRET);
         ReflectionTestUtils.setField(provider, "jwtExpiration", ACCESS_MS);
         ReflectionTestUtils.setField(provider, "refreshExpiration", REFRESH_MS);
         ReflectionTestUtils.setField(provider, "tokenBlacklistService", tokenBlacklistService);
@@ -75,6 +75,38 @@ class JwtTokenProviderTest {
 
         assertFalse(provider.validateToken(original));
         assertFalse(provider.validateToken(rotated));
+    }
+
+    /** Token kieu CU: mint truoc khi co claim "sid" (khong he co claim do). */
+    private String legacyTokenWithoutSidClaim() {
+        return io.jsonwebtoken.Jwts.builder()
+            .subject("1")
+            .claim("roles", java.util.List.of("ROLE_USER"))
+            .claim("type", "access")
+            .issuedAt(new java.util.Date())
+            .expiration(new java.util.Date(System.currentTimeMillis() + ACCESS_MS))
+            .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(SECRET.getBytes()))
+            .compact();
+    }
+
+    @Test
+    void validateToken_returnsFalse_whenLegacyTokenWithoutSidIsRawBlacklisted() {
+        // Token cu khong co sid -> khong the kiem tra blacklist theo sid. Phai
+        // quay ve kiem tra theo DUNG CHUOI TOKEN (co che blacklist cu), neu
+        // khong cac token da bi thu hoi truoc khi trien khai sid se "song lai".
+        String token = legacyTokenWithoutSidClaim();
+        assertNull(provider.getSid(token));
+        when(tokenBlacklistService.isBlacklisted(token)).thenReturn(true);
+
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void validateToken_returnsTrue_whenLegacyTokenWithoutSidIsNotBlacklisted() {
+        String token = legacyTokenWithoutSidClaim();
+        when(tokenBlacklistService.isBlacklisted(token)).thenReturn(false);
+
+        assertTrue(provider.validateToken(token));
     }
 
     @Test

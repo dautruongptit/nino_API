@@ -77,8 +77,16 @@ public class JwtTokenProvider {
             return false;
         }
         String sid = claims.get("sid", String.class);
-        if (sid != null && tokenBlacklistService.isBlacklisted(sid)) {
-            log.warn("[JWT] Phien da bi thu hoi: sid={}", sid);
+        if (sid != null) {
+            if (tokenBlacklistService.isBlacklisted(sid)) {
+                log.warn("[JWT] Phien da bi thu hoi: sid={}", sid);
+                return false;
+            }
+        } else if (tokenBlacklistService.isBlacklisted(token)) {
+            // Token tao truoc khi co claim "sid" — van phai ton trong cac muc
+            // blacklist CU (chan theo dung chuoi token) de khong lam "song lai"
+            // token da bi nguoi dung chu dong thu hoi truoc khi trien khai sid.
+            log.warn("[JWT] Token cu (khong co sid) da bi thu hoi truoc do");
             return false;
         }
         return true;

@@ -170,29 +170,40 @@ public class AuthService {
         }
 
         Long userId = jwtTokenProvider.getUserId(refreshToken);
-        String sid = jwtTokenProvider.getSid(refreshToken);
+        String existingSid = jwtTokenProvider.getSid(refreshToken);
+        // Token cu (mint truoc khi co claim "sid") tra ve sid null. Neu cu de
+        // null thi JJWT bo claim "sid" khi tao token moi -> cap token moi CUNG
+        // khong co sid, va vi refresh la cua so truot 7 ngay, phien nay se mai
+        // mai khong the thu hoi duoc. Sinh sid moi ngay tai day de "tu chua":
+        // cap token vua tao da co sid, nen vong logout/refresh KE TIEP duoc
+        // bao ve day du theo sid.
+        //
+        // KHONG tao lai dong LoginHistory cho phien cu nay (ngoai pham vi
+        // spec): phien do van khong hien trong Login History va khong thu hoi
+        // tu xa duoc — gioi han da biet truoc. Nhung ke tu luc nay token luon
+        // chan duoc qua blacklist theo sid.
+        final String sid = existingSid != null ? existingSid : UUID.randomUUID().toString();
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
         // sid da bi thu hoi (dang xuat tu xa) nhung Redis chua kip phan anh —
         // hang phong thu thu 2 ben canh validateToken() da kiem tra blacklist.
         //
-        // Guard sid != null: token cu (mint truoc Task 2) khong co claim "sid"
-        // nen getSid() tra ve null. findBySessionId(null) se bi Hibernate dich
-        // "= NULL" thanh "IS NULL", khop MOI dong co session_id null trong bang
-        // login_histories — nem IncorrectResultSizeDataAccessException khi co
-        // nhieu hon 1 dong nhu vay. Token cu van phai refresh thanh cong, chi la
-        // khong co LoginHistory nao de cap nhat.
-        if (sid != null) {
-            loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
-                if (history.getRevokedAt() != null) {
-                    throw new UnauthorizedException("Phiên đăng nhập đã bị thu hồi");
-                }
-                history.setRefreshExpiresAt(
-                    LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs())));
-                loginHistoryRepo.save(history);
-            });
-        }
+        // sid o day LUON khac null (xem doan tu chua ben tren) — quan trong vi
+        // findBySessionId(null) se bi Hibernate dich "= NULL" thanh "IS NULL",
+        // khop MOI dong co session_id null trong bang login_histories va nem
+        // IncorrectResultSizeDataAccessException khi co nhieu hon 1 dong nhu
+        // vay. Voi sid vua sinh moi se khong co dong nao khop — dung y do, token
+        // cu van phai refresh thanh cong, chi la khong co LoginHistory de cap
+        // nhat.
+        loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
+            if (history.getRevokedAt() != null) {
+                throw new UnauthorizedException("Phiên đăng nhập đã bị thu hồi");
+            }
+            history.setRefreshExpiresAt(
+                LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs())));
+            loginHistoryRepo.save(history);
+        });
 
         String newAccessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
@@ -209,21 +220,37 @@ public class AuthService {
     // phai tung chuoi token rieng le) — nen van hoat dong dung ke ca sau khi
     // client da /auth/refresh nhieu lan. Refresh token (neu con hop le) song
     // lau hon access token nen TTL blacklist uu tien lay tu no.
+    //
+    // Token CU mint truoc khi co claim "sid" thi khong co sid de chan theo
+    // phien. Truong hop do phai quay ve co che cu: chan theo DUNG CHUOI TOKEN.
+    // Neu khong, moi phien dang hoat dong luc trien khai sid se logout "thanh
+    // cong" (200 OK) ma token van con hieu luc — mat hoan toan kha nang thu
+    // hoi token. Moi token duoc xet DOC LAP de an toan trong ca cac truong hop
+    // hon hop (1 token co sid, 1 token khong).
     @Transactional
     public void logout(Long userId, String accessToken, String refreshToken, String fcmToken) {
-        String sid = null;
-        if (accessToken != null) {
-            sid = jwtTokenProvider.getSid(accessToken);
-        }
-        Duration ttl = Duration.ZERO;
         boolean refreshValid = refreshToken != null && jwtTokenProvider.validateToken(refreshToken);
-        if (refreshValid) {
-            if (sid == null) sid = jwtTokenProvider.getSid(refreshToken);
-            ttl = jwtTokenProvider.getRemainingValidity(refreshToken);
-        } else if (accessToken != null) {
-            ttl = jwtTokenProvider.getRemainingValidity(accessToken);
+        String accessSid  = accessToken != null ? jwtTokenProvider.getSid(accessToken) : null;
+        String refreshSid = refreshValid ? jwtTokenProvider.getSid(refreshToken) : null;
+
+        // Fallback cho token cu (khong co sid): chan theo dung chuoi token.
+        boolean legacyBlacklisted = false;
+        if (accessToken != null && accessSid == null) {
+            tokenBlacklistService.blacklist(accessToken, jwtTokenProvider.getRemainingValidity(accessToken));
+            legacyBlacklisted = true;
         }
+        if (refreshValid && refreshSid == null) {
+            tokenBlacklistService.blacklist(refreshToken, jwtTokenProvider.getRemainingValidity(refreshToken));
+            legacyBlacklisted = true;
+        }
+
+        // Token co sid: 1 lan ghi blacklist chan ca phien, kem danh dau dong
+        // LoginHistory tuong ung la da thu hoi.
+        String sid = accessSid != null ? accessSid : refreshSid;
         if (sid != null) {
+            Duration ttl = refreshValid
+                ? jwtTokenProvider.getRemainingValidity(refreshToken)
+                : jwtTokenProvider.getRemainingValidity(accessToken);
             tokenBlacklistService.blacklist(sid, ttl);
             loginHistoryRepo.findBySessionId(sid).ifPresent(history -> {
                 history.setRevokedAt(LocalDateTime.now());
@@ -233,7 +260,8 @@ public class AuthService {
         if (fcmToken != null) {
             userDeviceRepo.deleteByFcmTokenAndUserId(fcmToken, userId);
         }
-        log.info("[Auth] Dang xuat: userId={} sid={} huyThietBi={}", userId, sid, fcmToken != null);
+        log.info("[Auth] Dang xuat: userId={} sid={} chanTokenCuTheoChuoi={} huyThietBi={}",
+            userId, sid, legacyBlacklisted, fcmToken != null);
     }
 
     // ── PROFILE — cache 30 phút ──────────────────────────────────────────────
