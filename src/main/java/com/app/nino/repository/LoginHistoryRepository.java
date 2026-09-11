@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface LoginHistoryRepository extends JpaRepository<LoginHistory, Long> {
 
@@ -21,4 +22,6 @@ public interface LoginHistoryRepository extends JpaRepository<LoginHistory, Long
     long countFailuresSince(@Param("userId") Long userId, @Param("since") LocalDateTime since);
 
     List<LoginHistory> findByIpAddressAndUserIdOrderByLoginAtDesc(String ipAddress, Long userId);
+
+    Optional<LoginHistory> findBySessionId(String sessionId);
 }

@@ -53,6 +53,22 @@ public class LoginHistory {
     @Column(name = "login_at", nullable = false)
     private LocalDateTime loginAt;
 
+    /** Claim "sid" cua JWT phat hanh o lan dang nhap nay — xem JwtTokenProvider.
+     *  NULL cho dong that bai (khong co phien nao de theo doi) hoac dong tao
+     *  truoc khi co migration nay. */
+    @Column(name = "session_id", length = 36)
+    private String sessionId;
+
+    /** Han refresh token HIEN TAI cua phien nay — cap nhat lai moi lan
+     *  /auth/refresh thanh cong (cua so 7 ngay truot toi). */
+    @Column(name = "refresh_expires_at")
+    private LocalDateTime refreshExpiresAt;
+
+    /** Thoi diem phien bi thu hoi (tu dang xuat thuong hoac dang xuat tu xa
+     *  qua man Lich su dang nhap) — NULL nghia la chua thu hoi. */
+    @Column(name = "revoked_at")
+    private LocalDateTime revokedAt;
+
     @PrePersist
     protected void onCreate() {
         if (this.loginAt == null) this.loginAt = LocalDateTime.now();
