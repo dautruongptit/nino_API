@@ -242,4 +242,39 @@ class ReminderSchedulerTest {
         verify(fcmService, never()).sendToUser(any(), anyString(), anyString(), any());
         verify(reminderRepo, never()).save(any());
     }
+
+    // ── Nhiều mốc nhắc CÙNG 1 sự kiện đến hạn CÙNG lúc (backend không chạy
+    // liên tục — chỉ bật khi dev — nên các mốc quá hạn dồn cục lại đến khi
+    // có 1 lượt quét bắt được tất cả) — chỉ nên bắn 1 push, không phải N
+    // push giống hệt nhau cho cùng 1 sự kiện. ──────────────────────────────
+
+    @Test
+    void checkReminders_multipleDueRemindersSameEvent_sendsOnlyOnePush() {
+        Event event = eventOn(LocalDate.now(), LocalTime.now().minusMinutes(1));
+        // "3 ngày trước" đã trễ rất lâu (event chỉ mới qua 1 phút, không
+        // phải 3 ngày trước) -> giả lập backend nghỉ lâu ngày, mốc này lẽ
+        // ra phải bắn từ 3 ngày trước nhưng chưa có backend nào chạy.
+        EventReminder staleReminder = EventReminder.builder()
+            .id(100L).event(event).remindDaysBefore(3).isEnabled(true).notifiedAt(null).build();
+        // "1 giờ trước" cũng trễ nhưng gần "bây giờ" hơn hẳn -> vẫn còn giá
+        // trị cảnh báo, nên đây mới là mốc đáng được thông báo thật sự.
+        EventReminder freshReminder = EventReminder.builder()
+            .id(101L).event(event).remindHoursBefore(1).isEnabled(true).notifiedAt(null).build();
+
+        when(reminderRepo.findDueCandidates(any())).thenReturn(List.of(staleReminder, freshReminder));
+        Cache cache = mock(Cache.class);
+        when(cacheManager.getCache("unreadCount")).thenReturn(cache);
+
+        scheduler.checkReminders();
+
+        // Chỉ 1 notification + 1 push cho cả nhóm, không phải 2.
+        verify(notifRepo, times(1)).save(any());
+        verify(fcmService, times(1)).sendToUser(eq(1L), anyString(), anyString(), any(Map.class));
+        // Nhưng CẢ HAI reminder đều phải được đánh dấu đã xử lý (notifiedAt
+        // set) để không mốc nào bắn lại/rơi vào lượt quét sau.
+        verify(reminderRepo).save(argThat((EventReminder r) ->
+            r.getId().equals(100L) && r.getNotifiedAt() != null));
+        verify(reminderRepo).save(argThat((EventReminder r) ->
+            r.getId().equals(101L) && r.getNotifiedAt() != null));
+    }
 }
