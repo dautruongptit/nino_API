@@ -61,6 +61,23 @@ public class NotificationService {
         log.info("[Notification] Danh dau tat ca da doc: userId={}", userId);
     }
 
+    // ── DELETE ONE ────────────────────────────────────────────────────────
+    @Transactional
+    public void delete(Long id, Long userId) {
+        Notification n = notifRepo.findById(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Thong bao khong ton tai: " + id));
+
+        if (!n.getUser().getId().equals(userId)) {
+            log.warn("[Notification] Xoa bi tu choi: notificationId={} ownerUserId={} requestUserId={}",
+                id, n.getUser().getId(), userId);
+            throw new ForbiddenException("Ban khong co quyen xoa thong bao nay");
+        }
+
+        notifRepo.delete(n);
+        log.info("[Notification] Da xoa: notificationId={} userId={}", id, userId);
+    }
+
     // ── PRIVATE HELPERS ─────────────────────────────────────────────────
     private NotificationResponse toResponse(Notification n) {
         return NotificationResponse.builder()

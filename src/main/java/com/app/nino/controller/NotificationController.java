@@ -46,4 +46,12 @@ public class NotificationController {
         notificationService.markAllAsRead(userId);
         return ResponseEntity.ok(BaseResponse.success(null, "Đã đánh dấu tất cả đã đọc"));
     }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Xóa 1 thông báo")
+    public ResponseEntity<BaseResponse<?>> delete(
+            @PathVariable Long id, @AuthenticationPrincipal Long userId) {
+        notificationService.delete(id, userId);
+        return ResponseEntity.ok(BaseResponse.success(null, "Đã xóa thông báo"));
+    }
 }
