@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -494,5 +495,72 @@ class AuthServiceTest {
             () -> service.revokeLoginHistorySession(1L, 9L));
 
         assertEquals(missingRowEx.getMessage(), wrongOwnerEx.getMessage());
+    }
+
+    // ── DANG XUAT TAT CA THIET BI KHAC ─────────────────────────────────────
+
+    @Test
+    void revokeAllOtherSessions_revokesActiveSessionsExceptCurrent() {
+        com.app.nino.model.entity.LoginHistory current = com.app.nino.model.entity.LoginHistory.builder()
+            .id(1L).isSuccess(true).sessionId("sid-current")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+        com.app.nino.model.entity.LoginHistory other1 = com.app.nino.model.entity.LoginHistory.builder()
+            .id(2L).isSuccess(true).sessionId("sid-other-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(2)).build();
+        com.app.nino.model.entity.LoginHistory other2 = com.app.nino.model.entity.LoginHistory.builder()
+            .id(3L).isSuccess(true).sessionId("sid-other-2")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusHours(5)).build();
+
+        when(loginHistoryRepo.findByUserIdAndRevokedAtIsNullAndSessionIdIsNotNull(1L))
+            .thenReturn(java.util.List.of(current, other1, other2));
+
+        int revoked = service.revokeAllOtherSessions(1L, "sid-current");
+
+        assertEquals(2, revoked);
+        verify(tokenBlacklistService).blacklist(eq("sid-other-1"), any());
+        verify(tokenBlacklistService).blacklist(eq("sid-other-2"), any());
+        verify(tokenBlacklistService, never()).blacklist(eq("sid-current"), any());
+        assertNotNull(other1.getRevokedAt());
+        assertNotNull(other2.getRevokedAt());
+        assertNull(current.getRevokedAt());
+        verify(loginHistoryRepo).save(other1);
+        verify(loginHistoryRepo).save(other2);
+        verify(loginHistoryRepo, never()).save(current);
+    }
+
+    @Test
+    void revokeAllOtherSessions_skipsExpiredAndAlreadyInactiveRows() {
+        com.app.nino.model.entity.LoginHistory expired = com.app.nino.model.entity.LoginHistory.builder()
+            .id(1L).isSuccess(true).sessionId("sid-expired")
+            .refreshExpiresAt(java.time.LocalDateTime.now().minusDays(1)).build();
+        com.app.nino.model.entity.LoginHistory current = com.app.nino.model.entity.LoginHistory.builder()
+            .id(2L).isSuccess(true).sessionId("sid-current")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(3)).build();
+
+        when(loginHistoryRepo.findByUserIdAndRevokedAtIsNullAndSessionIdIsNotNull(1L))
+            .thenReturn(java.util.List.of(expired, current));
+
+        int revoked = service.revokeAllOtherSessions(1L, "sid-current");
+
+        assertEquals(0, revoked);
+        verifyNoInteractions(tokenBlacklistService);
+        verify(loginHistoryRepo, never()).save(any());
+    }
+
+    @Test
+    void revokeAllOtherSessions_noCurrentSid_revokesEveryActiveSession() {
+        com.app.nino.model.entity.LoginHistory a = com.app.nino.model.entity.LoginHistory.builder()
+            .id(1L).isSuccess(true).sessionId("sid-a")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(1)).build();
+        com.app.nino.model.entity.LoginHistory b = com.app.nino.model.entity.LoginHistory.builder()
+            .id(2L).isSuccess(true).sessionId("sid-b")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(1)).build();
+
+        when(loginHistoryRepo.findByUserIdAndRevokedAtIsNullAndSessionIdIsNotNull(1L))
+            .thenReturn(java.util.List.of(a, b));
+
+        int revoked = service.revokeAllOtherSessions(1L, null);
+
+        assertEquals(2, revoked);
     }
 }

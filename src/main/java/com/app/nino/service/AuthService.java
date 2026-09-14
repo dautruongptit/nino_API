@@ -39,6 +39,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -382,12 +383,32 @@ public class AuthService {
         if (!isActive(history)) {
             throw new BadRequestException("Phiên đăng nhập này đã hết hạn hoặc đã đăng xuất");
         }
+        revoke(history);
+        log.info("[Auth] Dang xuat tu xa qua Lich su dang nhap: userId={} historyId={} sid={}",
+            userId, historyId, history.getSessionId());
+    }
+
+    /** Dang xuat moi thiet bi dang active cua user, tru thiet bi dang goi
+     *  request nay (currentSid) — dung cho nut "Dang xuat tat ca" o man
+     *  Lich su dang nhap. Tra ve so thiet bi da bi dang xuat. */
+    @Transactional
+    public int revokeAllOtherSessions(Long userId, String currentSid) {
+        List<LoginHistory> candidates = loginHistoryRepo.findByUserIdAndRevokedAtIsNullAndSessionIdIsNotNull(userId);
+        int count = 0;
+        for (LoginHistory history : candidates) {
+            if (history.getSessionId().equals(currentSid) || !isActive(history)) continue;
+            revoke(history);
+            count++;
+        }
+        log.info("[Auth] Dang xuat tat ca thiet bi khac: userId={} count={}", userId, count);
+        return count;
+    }
+
+    private void revoke(LoginHistory history) {
         Duration ttl = Duration.between(LocalDateTime.now(), history.getRefreshExpiresAt());
         tokenBlacklistService.blacklist(history.getSessionId(), ttl);
         history.setRevokedAt(LocalDateTime.now());
         loginHistoryRepo.save(history);
-        log.info("[Auth] Dang xuat tu xa qua Lich su dang nhap: userId={} historyId={} sid={}",
-            userId, historyId, history.getSessionId());
     }
 
     // ── GOOGLE CALENDAR (placeholder — chưa implement logic đồng bộ thật) ──────

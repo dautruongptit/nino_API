@@ -24,4 +24,9 @@ public interface LoginHistoryRepository extends JpaRepository<LoginHistory, Long
     List<LoginHistory> findByIpAddressAndUserIdOrderByLoginAtDesc(String ipAddress, Long userId);
 
     Optional<LoginHistory> findBySessionId(String sessionId);
+
+    /** Cac ban ghi con co the "dang active" (chua bi thu hoi, con sid) —
+     *  con phai loc them qua AuthService.isActive() de bo cac dong da het
+     *  han refresh token tu nhien. */
+    List<LoginHistory> findByUserIdAndRevokedAtIsNullAndSessionIdIsNotNull(Long userId);
 }

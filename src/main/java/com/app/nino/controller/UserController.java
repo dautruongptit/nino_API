@@ -74,6 +74,16 @@ public class UserController {
         return ResponseEntity.ok(BaseResponse.success(null, "Đã đăng xuất thiết bị"));
     }
 
+    @PostMapping("/me/login-history/logout-all")
+    @Operation(summary = "Đăng xuất tất cả thiết bị khác",
+               description = "Thu hồi mọi phiên đăng nhập đang active, trừ phiên đang gọi request này.")
+    public ResponseEntity<BaseResponse<?>> logoutAllOtherSessions(
+            @AuthenticationPrincipal Long userId,
+            @RequestAttribute(name = "authSid", required = false) String currentSid) {
+        int count = authService.revokeAllOtherSessions(userId, currentSid);
+        return ResponseEntity.ok(BaseResponse.success(count, "Đã đăng xuất " + count + " thiết bị"));
+    }
+
     // ── ADMIN ────────────────────────────────────────────────────────────────
 
     @GetMapping
