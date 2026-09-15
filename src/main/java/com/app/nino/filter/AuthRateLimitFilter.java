@@ -19,6 +19,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Gioi han so request/cua so thoi gian theo IP cho cac endpoint xac thuc
@@ -49,6 +51,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final String KEY_PREFIX = "ratelimit:auth:";
 
+    /** Tap dong, huu han cac action hop le — bat ky gia tri nao khac deu gom
+     * chung vao "other". Xem giai thich chi tiet o resolveAction(). */
+    private static final Set<String> KNOWN_ACTIONS = Set.of("login", "register", "refresh", "google", "logout");
+
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -78,7 +84,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        String action = uri.substring(authPrefix.length());
+        String action = resolveAction(uri, authPrefix);
         int limit = resolveLimit(action);
         String ip = DeviceParser.getClientIp(request);
         String bucketKey = KEY_PREFIX + action + ":" + ip;
@@ -92,10 +98,41 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * Rut gon URI ve 1 trong so HUU HAN action da biet ("other" cho moi
+     * truong hop con lai) — KHONG duoc dung thang phan URI con lai sau
+     * "/auth/" lam key (nhu ban dau), vi Spring dispatcher bo qua matrix
+     * param (";x=1") va nhieu bien the path khac khi routing, nghia la
+     * "/auth/login;x=1", "/auth/login;x=2"... deu goi TRUNG 1 handler
+     * login nhung se tao ra vo so Redis key KHAC NHAU neu dung raw suffix —
+     * xoa sach tac dung rate-limit (attacker chi can doi hau to moi request
+     * la vuot gioi han vo han lan) VA lam Redis phinh to vo to (moi key
+     * mot TTL rieng, khong bao gio hoi tu).
+     *
+     * Chi lay chuoi chu/so/gach ngang/gach duoi lien tuc dau tien (ten
+     * action thuc su, vd "login" trong "login;x=1" hay "login/"), roi
+     * khop voi tap KNOWN_ACTIONS co san — dam bao so luong bucket Redis
+     * bi chan boi |KNOWN_ACTIONS ∪ {other}| × so IP, khong phu thuoc noi
+     * dung URI attacker tu chon.
+     */
+    private String resolveAction(String uri, String authPrefix) {
+        String suffix = uri.substring(authPrefix.length());
+        int end = 0;
+        while (end < suffix.length()) {
+            char c = suffix.charAt(end);
+            if (!Character.isLetterOrDigit(c) && c != '-' && c != '_') break;
+            end++;
+        }
+        String candidate = suffix.substring(0, end).toLowerCase(Locale.ROOT);
+        return KNOWN_ACTIONS.contains(candidate) ? candidate : "other";
+    }
+
     private int resolveLimit(String action) {
-        if (action.startsWith("login")) return loginMax;
-        if (action.startsWith("register")) return registerMax;
-        return defaultMax;
+        return switch (action) {
+            case "login" -> loginMax;
+            case "register" -> registerMax;
+            default -> defaultMax;
+        };
     }
 
     /** true neu da vuot [limit] request trong cua so [windowSeconds] hien tai. */
