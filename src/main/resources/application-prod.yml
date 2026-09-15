@@ -34,3 +34,11 @@ logging:
     com.app.nino: ${LOG_LEVEL_APP:INFO}
     org.hibernate.orm.jdbc.bind: WARN
     org.hibernate.SQL: WARN
+
+# ── CORS — CHI domain that o prod, KHONG duoc chua "*" (SEC finding:
+#    wildcard cho phep moi website goi API kem Bearer token bi lo qua
+#    XSS/log/thiet bi mat). Bat lai duoc qua .env neu can them domain,
+#    nhung khong duoc dat gia tri chua "*".
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://nino.thongtinchinhhieu.site,https://nino-api.thongtinchinhhieu.site}

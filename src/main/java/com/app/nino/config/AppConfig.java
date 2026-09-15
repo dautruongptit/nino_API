@@ -1,5 +1,6 @@
 package com.app.nino.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -12,6 +13,14 @@ import java.util.concurrent.Executor;
 @Configuration
 @EnableAsync
 public class AppConfig {
+
+    // Danh sach origin duoc phep goi API, phan cach boi dau phay — cau hinh
+    // rieng cho dev (application.yml) va prod (application-prod.yml), KHONG
+    // duoc chua "*" (SEC finding: wildcard cho phep MOI website goi API kem
+    // Bearer token bi lo qua XSS/log/thiet bi mat, lam vo hieu hoa allowlist
+    // domain cu the dung kem no).
+    @Value("#{'${app.cors.allowed-origins}'.split(',')}")
+    private java.util.List<String> allowedOrigins;
 
     /** Pool rieng, nho, cho viec luu RequestLog bat dong bo (RequestLogService)
      * — tach khoi cac tac vu async khac de 1 con lag ghi log khong anh huong
@@ -33,14 +42,10 @@ public class AppConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                    .allowedOriginPatterns("*", "http://nino.thongtinchinhhieu.site", "http://nino-api.thongtinchinhhieu.site",
-                        "http://100.106.5.35:*", "http://192.22.12.103:*")
+                    .allowedOriginPatterns(allowedOrigins.toArray(new String[0]))
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                     .allowedHeaders("*")
                     .allowCredentials(false);
-                // Production: thay allowedOriginPatterns("*") bang domain cu the
-                // "http://100.106.5.35:*" — IP Tailscale cua may test, du moi port
-                // "http://192.22.12.103:*" — IP LAN/may test, du moi port
             }
         };
     }

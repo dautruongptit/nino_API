@@ -111,6 +111,10 @@ app:
     credentials-path: firebase-service-account.json
   google:
     client-id: ${GOOGLE_CLIENT_ID:}             # OAuth 2.0 Client ID tu Google Cloud Console
+  # CORS — dev: cho phep localhost + IP may test, du moi port. KHONG duoc
+  # them "*" — xem AppConfig.corsConfigurer(). Override rieng o prod.
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://100.106.5.35:*,http://192.22.12.103:*}
 # ── ACTUATOR ────────────────────────────────────────────────────
 management:
   endpoints:
