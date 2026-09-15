@@ -1,6 +1,5 @@
 package com.app.nino.service;
 
-import com.app.nino.exception.ForbiddenException;
 import com.app.nino.exception.ResourceNotFoundException;
 import com.app.nino.model.dto.response.NotificationResponse;
 import com.app.nino.model.entity.Notification;
@@ -42,10 +41,14 @@ public class NotificationService {
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Thong bao khong ton tai: " + id));
 
+        // Tra ve loi "khong ton tai" giong het truong hop id sai — khong lo cho
+        // ke tan cong (do ID tuan tu) biet dong nay co ton tai nhung thuoc ve
+        // user khac (chong doan ID / IDOR enumeration), giong pattern da ap
+        // dung o RelativeService/AuthService.revokeLoginHistorySession.
         if (!n.getUser().getId().equals(userId)) {
             log.warn("[Notification] Truy cap bi tu choi: notificationId={} ownerUserId={} requestUserId={}",
                 id, n.getUser().getId(), userId);
-            throw new ForbiddenException("Ban khong co quyen truy cap thong bao nay");
+            throw new ResourceNotFoundException("Thong bao khong ton tai: " + id);
         }
 
         n.setIsRead(true);
@@ -68,10 +71,11 @@ public class NotificationService {
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Thong bao khong ton tai: " + id));
 
+        // Xem giai thich chong doan ID o markAsRead() ben tren.
         if (!n.getUser().getId().equals(userId)) {
             log.warn("[Notification] Xoa bi tu choi: notificationId={} ownerUserId={} requestUserId={}",
                 id, n.getUser().getId(), userId);
-            throw new ForbiddenException("Ban khong co quyen xoa thong bao nay");
+            throw new ResourceNotFoundException("Thong bao khong ton tai: " + id);
         }
 
         notifRepo.delete(n);

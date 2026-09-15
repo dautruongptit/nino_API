@@ -1,7 +1,6 @@
 package com.app.nino.service;
 
 import com.app.nino.exception.BadRequestException;
-import com.app.nino.exception.ForbiddenException;
 import com.app.nino.exception.ResourceNotFoundException;
 import com.app.nino.model.dto.request.CreateEventRequest;
 import com.app.nino.model.dto.request.ReminderRequest;
@@ -281,10 +280,14 @@ public class EventService {
         Event e = eventRepo.findById(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Su kien khong ton tai: " + id));
+        // Tra ve loi "khong ton tai" giong het truong hop id sai — khong lo cho
+        // ke tan cong (do ID tuan tu) biet dong nay co ton tai nhung thuoc ve
+        // user khac (chong doan ID / IDOR enumeration), giong pattern da ap
+        // dung o RelativeService/AuthService.revokeLoginHistorySession.
         if (!e.getUser().getId().equals(userId)) {
             log.warn("[Event] Truy cap bi tu choi: eventId={} ownerUserId={} requestUserId={}",
                 id, e.getUser().getId(), userId);
-            throw new ForbiddenException("Ban khong co quyen truy cap su kien nay");
+            throw new ResourceNotFoundException("Su kien khong ton tai: " + id);
         }
         return e;
     }
