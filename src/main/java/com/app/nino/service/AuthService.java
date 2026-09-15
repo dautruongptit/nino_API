@@ -20,6 +20,7 @@ import com.app.nino.repository.UserRepository;
 import com.app.nino.security.JwtTokenProvider;
 import com.app.nino.security.TokenBlacklistService;
 import com.app.nino.util.DeviceParser;
+import com.app.nino.util.ImageSignatureValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -327,7 +328,18 @@ public class AuthService {
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
-        String extension = ALLOWED_AVATAR_TYPES.get(file.getContentType());
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new BadRequestException("Không đọc được file upload");
+        }
+
+        // Nhan dien content-type qua magic byte cua noi dung THAT, KHONG dung
+        // file.getContentType() — header do client tu khai bao trong multipart
+        // request, hoan toan gia mao duoc (vd gan "image/png" cho mot file bat ky).
+        String detectedType = ImageSignatureValidator.detect(content);
+        String extension = detectedType != null ? ALLOWED_AVATAR_TYPES.get(detectedType) : null;
         if (extension == null) {
             throw new BadRequestException("Chỉ chấp nhận ảnh JPEG/PNG/WEBP/GIF");
         }
@@ -344,7 +356,7 @@ public class AuthService {
                 throw new BadRequestException("Tên file không hợp lệ");
             }
 
-            Files.copy(file.getInputStream(), path);
+            Files.write(path, content);
             user.setAvatarUrl("/uploads/avatars/" + filename);
         } catch (IOException e) {
             log.error("[Auth] Upload avatar that bai: userId={}", userId, e);
