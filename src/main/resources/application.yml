@@ -115,6 +115,16 @@ app:
   # them "*" — xem AppConfig.corsConfigurer(). Override rieng o prod.
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://100.106.5.35:*,http://192.22.12.103:*}
+  # Rate-limit theo IP cho /auth/** (AuthRateLimitFilter) — bo sung cho
+  # AuthService.MAX_FAILED_ATTEMPTS (chi khoa theo tung tai khoan), chan
+  # credential-stuffing/spam dang ky tu 1 IP. window-seconds la do dai
+  # cua so fixed-window; *-max la so request toi da trong 1 cua so.
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+    login-max: ${RATE_LIMIT_LOGIN_MAX:10}
+    register-max: ${RATE_LIMIT_REGISTER_MAX:5}
+    default-max: ${RATE_LIMIT_DEFAULT_MAX:30}
 # ── ACTUATOR ────────────────────────────────────────────────────
 management:
   endpoints:
