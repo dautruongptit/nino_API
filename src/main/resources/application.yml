@@ -149,7 +149,11 @@ logging:
     org.hibernate.SQL:             ${LOG_LEVEL_SQL:WARN}
     org.hibernate.type.descriptor: WARN
     com.zaxxer.hikari:             WARN
-    org.hibernate.orm.jdbc.bind: TRACE
+    # Truoc day hard-code TRACE (khong qua bien moi truong nhu cac logger
+    # tren) — ghi ra log MOI gia tri bind vao cau SQL, gom ca password hash,
+    # email, cac truong nhay cam khac. Mac dinh ha ve WARN, chi bat TRACE
+    # thu cong qua env khi that su can debug SQL cuc bo.
+    org.hibernate.orm.jdbc.bind:   ${LOG_LEVEL_SQL_BIND:WARN}
 
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{requestId}] %-5level %logger{36} - %msg%n"
