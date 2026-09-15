@@ -16,7 +16,10 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://100.106.5.35:3306/event_app?useSSL=false&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:1234567890}
+    password: ${DB_PASSWORD}                    # BAT BUOC — khong co default (giong JWT_SECRET ben duoi).
+                                                  # Truoc day default la "1234567890": mat khau yeu, hard-code
+                                                  # trong repo public — bo default de app fail-fast luc start
+                                                  # neu quen cau hinh, thay vi am tham dung mat khau yeu.
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
