@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -18,6 +20,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     Optional<User> findByGoogleId(String googleId);
+
+    @Query("SELECT u FROM User u WHERE u.deletionRequestedAt IS NOT NULL AND u.deletionRequestedAt < :cutoff AND u.status <> 'DEL'")
+    List<User> findDueForDeletion(@Param("cutoff") LocalDateTime cutoff);
 
     @Modifying
     @Query("UPDATE User u SET u.totalEvents = u.totalEvents + 1 WHERE u.id = :userId")
