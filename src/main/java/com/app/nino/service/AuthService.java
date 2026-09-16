@@ -322,6 +322,32 @@ public class AuthService {
         return UserProfileResponse.from(userRepo.save(user));
     }
 
+    // ── YEU CAU / HUY XOA TAI KHOAN ──────────────────────────────────────────
+    @CacheEvict(value = "userProfile", key = "#userId")
+    @Transactional
+    public UserProfileResponse requestAccountDeletion(Long userId) {
+        User user = userRepo.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        if (user.getDeletionRequestedAt() == null) {
+            user.setDeletionRequestedAt(LocalDateTime.now());
+            userRepo.save(user);
+            log.info("[Auth] Yeu cau xoa tai khoan: userId={}", userId);
+        }
+        // Da co yeu cau treo tu truoc — khong gia han lai timer, tra ve nguyen trang.
+        return UserProfileResponse.from(user);
+    }
+
+    @CacheEvict(value = "userProfile", key = "#userId")
+    @Transactional
+    public UserProfileResponse cancelAccountDeletion(Long userId) {
+        User user = userRepo.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        user.setDeletionRequestedAt(null);
+        userRepo.save(user);
+        log.info("[Auth] Huy yeu cau xoa tai khoan: userId={}", userId);
+        return UserProfileResponse.from(user);
+    }
+
     @CacheEvict(value = "userProfile", key = "#userId")
     @Transactional
     public UserProfileResponse uploadAvatar(Long userId, MultipartFile file) {

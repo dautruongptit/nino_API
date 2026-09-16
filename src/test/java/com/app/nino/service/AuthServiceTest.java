@@ -563,4 +563,46 @@ class AuthServiceTest {
 
         assertEquals(2, revoked);
     }
+
+    // ── YEU CAU / HUY XOA TAI KHOAN ──────────────────────────────────────
+
+    @Test
+    void requestAccountDeletion_firstCall_setsDeletionRequestedAtToNow() {
+        User user = User.builder().id(1L).email("a@b.com").build();
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.requestAccountDeletion(1L);
+
+        assertNotNull(user.getDeletionRequestedAt());
+        assertNotNull(result.getScheduledDeletionAt());
+        verify(userRepo).save(user);
+    }
+
+    @Test
+    void requestAccountDeletion_alreadyRequested_doesNotOverwriteTimestamp() {
+        java.time.LocalDateTime original = java.time.LocalDateTime.now().minusDays(5);
+        User user = User.builder().id(1L).email("a@b.com").deletionRequestedAt(original).build();
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(user));
+
+        var result = service.requestAccountDeletion(1L);
+
+        assertEquals(original, user.getDeletionRequestedAt());
+        assertEquals(original.plusDays(User.GRACE_PERIOD_DAYS), result.getScheduledDeletionAt());
+        verify(userRepo, never()).save(any());
+    }
+
+    @Test
+    void cancelAccountDeletion_clearsDeletionRequestedAt() {
+        User user = User.builder().id(1L).email("a@b.com")
+            .deletionRequestedAt(java.time.LocalDateTime.now()).build();
+        when(userRepo.findById(1L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.cancelAccountDeletion(1L);
+
+        assertNull(user.getDeletionRequestedAt());
+        assertNull(result.getScheduledDeletionAt());
+        verify(userRepo).save(user);
+    }
 }

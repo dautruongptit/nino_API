@@ -84,6 +84,22 @@ public class UserController {
         return ResponseEntity.ok(BaseResponse.success(count, "Đã đăng xuất " + count + " thiết bị"));
     }
 
+    @PostMapping("/me/delete-request")
+    @Operation(summary = "Yêu cầu xóa tài khoản (có grace period)")
+    public ResponseEntity<BaseResponse<?>> requestAccountDeletion(
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(BaseResponse.success(
+            authService.requestAccountDeletion(userId), "Đã ghi nhận yêu cầu xóa tài khoản"));
+    }
+
+    @PostMapping("/me/delete-cancel")
+    @Operation(summary = "Hủy yêu cầu xóa tài khoản")
+    public ResponseEntity<BaseResponse<?>> cancelAccountDeletion(
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(BaseResponse.success(
+            authService.cancelAccountDeletion(userId), "Đã hủy yêu cầu xóa tài khoản"));
+    }
+
     // ── ADMIN ────────────────────────────────────────────────────────────────
 
     @GetMapping
