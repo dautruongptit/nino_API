@@ -123,6 +123,11 @@ public class User {
     @Builder.Default
     private Set<Role> roles = new HashSet<>();
 
+    /** Thoi diem yeu cau xoa tai khoan (grace period GRACE_PERIOD_DAYS ngay ke
+     *  tu day) — NULL nghia la khong co yeu cau treo. Xem AccountDeletionScheduler. */
+    @Column(name = "deletion_requested_at")
+    private LocalDateTime deletionRequestedAt;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -153,6 +158,14 @@ public class User {
     public long getMinutesUntilUnlock() {
         if (!isCurrentlyLocked()) return 0;
         return java.time.Duration.between(LocalDateTime.now(), lockedUntil).toMinutes();
+    }
+
+    /** So ngay an han ke tu deletionRequestedAt truoc khi AccountDeletionScheduler
+     *  xoa mem tai khoan — xem spec 2026-09-16-account-deletion-data-privacy-design.md. */
+    public static final int GRACE_PERIOD_DAYS = 14;
+
+    public LocalDateTime getScheduledDeletionAt() {
+        return deletionRequestedAt != null ? deletionRequestedAt.plusDays(GRACE_PERIOD_DAYS) : null;
     }
 
     public boolean isActive() {

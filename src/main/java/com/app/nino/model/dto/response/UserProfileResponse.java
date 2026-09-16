@@ -28,6 +28,7 @@ public class UserProfileResponse {
     private Boolean isGoogleLinked;
     private Boolean googleCalendarConnected;
     private LocalDateTime lastLoginAt;
+    private LocalDateTime scheduledDeletionAt;
     private LocalDateTime createdAt;
 
     public static UserProfileResponse from(User u) {
@@ -50,6 +51,7 @@ public class UserProfileResponse {
             .isGoogleLinked(u.getGoogleId() != null)
             .googleCalendarConnected(u.getGoogleCalendarToken() != null)
             .lastLoginAt(u.getLastLoginAt())
+            .scheduledDeletionAt(u.getScheduledDeletionAt())
             .createdAt(u.getCreatedAt())
             .build();
     }
