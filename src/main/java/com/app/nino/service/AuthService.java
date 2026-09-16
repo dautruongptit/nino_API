@@ -359,6 +359,7 @@ public class AuthService {
             .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
         revokeAllOtherSessions(userId, null);
+        userDeviceRepo.deleteAllByUserId(userId);
 
         user.setEmail("deleted-" + user.getId() + "@nino.local");
         user.setUsername("deleted-" + user.getId());

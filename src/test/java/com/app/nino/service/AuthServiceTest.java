@@ -636,5 +636,6 @@ class AuthServiceTest {
         assertFalse(user.getIsActive());
         verify(tokenBlacklistService).blacklist(eq("sid-1"), any());
         assertNotNull(active.getRevokedAt());
+        verify(userDeviceRepo).deleteAllByUserId(7L);
     }
 }

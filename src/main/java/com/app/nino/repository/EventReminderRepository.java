@@ -17,6 +17,7 @@ public interface EventReminderRepository extends JpaRepository<EventReminder, Lo
     @Query("SELECT r FROM EventReminder r JOIN FETCH r.event e JOIN FETCH e.user"
          + " WHERE r.isEnabled = true"
          + " AND e.isActive = true"
-         + " AND e.eventDate >= :fromDate")
+         + " AND e.eventDate >= :fromDate"
+         + " AND e.user.status <> 'DEL'")
     List<EventReminder> findDueCandidates(@Param("fromDate") LocalDate fromDate);
 }

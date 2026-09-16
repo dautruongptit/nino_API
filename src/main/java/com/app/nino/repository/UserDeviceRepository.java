@@ -24,4 +24,8 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, Long> {
     @Modifying
     @Query("DELETE FROM UserDevice d WHERE d.fcmToken IN :tokens")
     void deleteAllByFcmTokenIn(@Param("tokens") List<String> tokens);
+
+    @Modifying
+    @Query("DELETE FROM UserDevice d WHERE d.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 }
