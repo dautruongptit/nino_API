@@ -348,6 +348,33 @@ public class AuthService {
         return UserProfileResponse.from(user);
     }
 
+    /** Xoa mem tai khoan da qua grace period — goi tu AccountDeletionScheduler.
+     *  Anonymize cac truong nhay cam, chuyen status sang DEL (canLogin() da
+     *  tu chan dang nhap voi status nay), va thu hoi MOI phien dang active
+     *  (currentSid=null -> revokeAllOtherSessions khong loai tru phien nao). */
+    @CacheEvict(value = "userProfile", key = "#userId")
+    @Transactional
+    public void finalizeAccountDeletion(Long userId) {
+        User user = userRepo.findById(userId)
+            .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        revokeAllOtherSessions(userId, null);
+
+        user.setEmail("deleted-" + user.getId() + "@nino.local");
+        user.setUsername("deleted-" + user.getId());
+        user.setFullName("Người dùng đã xóa");
+        user.setPhone(null);
+        user.setAvatarUrl(null);
+        user.setGoogleId(null);
+        user.setPasswordHash(null);
+        user.setGoogleCalendarToken(null);
+        user.setStatus("DEL");
+        user.setIsActive(false);
+        userRepo.save(user);
+
+        log.info("[Auth] Da xoa mem tai khoan (het grace period): userId={}", userId);
+    }
+
     @CacheEvict(value = "userProfile", key = "#userId")
     @Transactional
     public UserProfileResponse uploadAvatar(Long userId, MultipartFile file) {

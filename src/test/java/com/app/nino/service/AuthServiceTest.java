@@ -605,4 +605,36 @@ class AuthServiceTest {
         assertNull(result.getScheduledDeletionAt());
         verify(userRepo).save(user);
     }
+
+    @Test
+    void finalizeAccountDeletion_anonymizesUserAndRevokesAllActiveSessions() {
+        User user = User.builder().id(7L).email("real@b.com").username("real@b.com")
+            .fullName("Ten Thuc").phone("0912345678").avatarUrl("/uploads/x.jpg")
+            .googleId("g-1").passwordHash("hash").googleCalendarToken("tok")
+            .status("ACT").isActive(true)
+            .deletionRequestedAt(java.time.LocalDateTime.now().minusDays(15))
+            .build();
+        when(userRepo.findById(7L)).thenReturn(java.util.Optional.of(user));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        com.app.nino.model.entity.LoginHistory active = com.app.nino.model.entity.LoginHistory.builder()
+            .id(1L).isSuccess(true).sessionId("sid-1")
+            .refreshExpiresAt(java.time.LocalDateTime.now().plusDays(2)).build();
+        when(loginHistoryRepo.findByUserIdAndRevokedAtIsNullAndSessionIdIsNotNull(7L))
+            .thenReturn(java.util.List.of(active));
+
+        service.finalizeAccountDeletion(7L);
+
+        assertEquals("deleted-7@nino.local", user.getEmail());
+        assertEquals("deleted-7", user.getUsername());
+        assertEquals("Người dùng đã xóa", user.getFullName());
+        assertNull(user.getPhone());
+        assertNull(user.getAvatarUrl());
+        assertNull(user.getGoogleId());
+        assertNull(user.getPasswordHash());
+        assertNull(user.getGoogleCalendarToken());
+        assertEquals("DEL", user.getStatus());
+        assertFalse(user.getIsActive());
+        verify(tokenBlacklistService).blacklist(eq("sid-1"), any());
+        assertNotNull(active.getRevokedAt());
+    }
 }
