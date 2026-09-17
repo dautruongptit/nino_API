@@ -131,6 +131,7 @@ public class EventService {
                         ? Event.CustomIntervalUnit.valueOf(req.getCustomIntervalUnit()) : null)
                 .notes(req.getNotes())
                 .isActive(true)
+                .isHolidayReminder(Boolean.TRUE.equals(req.getIsHolidayReminder()))
                 .build();
         saveParticipants(event, userId, req.getParticipantIds());
         // Map reminders từ request

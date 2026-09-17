@@ -12,6 +12,7 @@ import com.app.nino.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -138,6 +139,29 @@ class EventServiceTest {
         assertEquals(null, reminder.getRemindDaysBefore());
         assertEquals(null, reminder.getRemindHoursBefore());
         assertEquals(null, reminder.getRemindMinutesBefore());
+    }
+
+    @Test
+    void create_withIsHolidayReminderTrue_setsFlagOnSavedEvent() {
+        CreateEventRequest req = baseRequest(null);
+        req.setIsHolidayReminder(true);
+
+        service.create(1L, req);
+
+        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        verify(eventRepo).save(captor.capture());
+        assertEquals(true, captor.getValue().getIsHolidayReminder());
+    }
+
+    @Test
+    void create_withoutIsHolidayReminder_defaultsToFalse() {
+        CreateEventRequest req = baseRequest(null);
+
+        service.create(1L, req);
+
+        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        verify(eventRepo).save(captor.capture());
+        assertEquals(false, captor.getValue().getIsHolidayReminder());
     }
 
     @Test

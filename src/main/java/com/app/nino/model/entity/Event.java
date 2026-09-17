@@ -75,6 +75,17 @@ public class Event {
     @Builder.Default
     private Boolean isActive = true;
 
+    /** true = event nay duoc tao tu nut "Nhac toi" o man Lich nghi le
+     *  (holiday_screen.dart), chua bi nguoi dung sua lai. Xem
+     *  HolidayReminderCleanupScheduler — day la dieu kien BAT BUOC (cung
+     *  isRecurring=false va relative=null) de duoc tu dong xoa sau khi
+     *  eventDate da qua. EventService.update() luon set lai thanh false
+     *  bat ke request gui gi, de bat ky lan sua nao cung "nhan" event
+     *  nay thanh cua nguoi dung va bao ve no khoi bi xoa. */
+    @Column(name = "is_holiday_reminder", nullable = false)
+    @Builder.Default
+    private Boolean isHolidayReminder = false;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

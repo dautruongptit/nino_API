@@ -46,4 +46,8 @@ public class CreateEventRequest {
 
     @Valid
     private List<ReminderRequest> reminders;
+
+    /** true = tao tu man Lich nghi le (holiday_screen.dart). Bo qua hoan
+     *  toan tren update — xem EventService.update(). */
+    private Boolean isHolidayReminder;
 }
