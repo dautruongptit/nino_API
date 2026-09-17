@@ -67,4 +67,11 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     // ── Sự kiện lặp lại theo Âm lịch (SEC: LUNAR_YEARLY) ────────────────────
 
     List<Event> findByRecurrenceTypeAndIsActiveTrue(Event.RecurrenceType recurrenceType);
+
+    // ── Don dep Event tu Lich nghi le da qua han ─────────────────────────
+    @Query("SELECT e FROM Event e WHERE e.isHolidayReminder = true"
+         + " AND e.eventDate < :today"
+         + " AND e.isRecurring = false"
+         + " AND e.relative IS NULL")
+    List<Event> findExpiredHolidayReminders(@Param("today") LocalDate today);
 }
