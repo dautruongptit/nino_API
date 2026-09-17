@@ -14,6 +14,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +29,9 @@ public class JwtTokenProvider {
 
     @Value("${JWT_REFRESH_EXPIRATION:604800000}")
     private long refreshExpiration;
+
+    @Value("${app.otp.reset-token-ttl-minutes:5}")
+    private long otpResetTokenTtlMinutes;
 
     @org.springframework.beans.factory.annotation.Autowired
     private TokenBlacklistService tokenBlacklistService;
@@ -63,6 +67,43 @@ public class JwtTokenProvider {
             .compact();
         log.debug("[JWT] Tao refresh token: userId={} sid={} expiresInMs={}", userId, sid, refreshExpiration);
         return token;
+    }
+
+    /** Token tam dung cho buoc doi mat khau/PIN SAU KHI da verify OTP thanh
+     *  cong (viec do la 1 task rieng, ngoai pham vi nay) — KHONG dung de
+     *  dang nhap: subject la EMAIL (khong phai userId, vi luong quen mat
+     *  khau lam viec truoc khi xac dinh duoc userId da xac thuc), va
+     *  type="otp_reset" khien JwtAuthFilter (chi chap nhan type="access")
+     *  khong the nham lan token nay voi mot access token that. "sid" la 1
+     *  UUID ngau nhien de endpoint doi mat khau/PIN co the blacklist token
+     *  sau khi dung 1 lan, tai dung TokenBlacklistService da co san. */
+    public String generateOtpToken(String email, String purpose) {
+        String sid = UUID.randomUUID().toString();
+        String token = Jwts.builder()
+            .subject(email)
+            .claim("type", "otp_reset")
+            .claim("purpose", purpose)
+            .claim("sid", sid)
+            .issuedAt(new Date())
+            .expiration(new Date(System.currentTimeMillis() + otpResetTokenTtlMinutes * 60_000))
+            .signWith(getSigningKey())
+            .compact();
+        log.debug("[JWT] Tao otp reset token: purpose={} sid={} ttlMinutes={}", purpose, sid, otpResetTokenTtlMinutes);
+        return token;
+    }
+
+    /** Email gan voi 1 otp_reset token — dung getSubject() thay vi
+     *  getUserId() (subject o day la email, khong phai userId numeric). */
+    public String getOtpEmail(String token) {
+        Claims claims = Jwts.parser().verifyWith(getSigningKey()).build()
+            .parseSignedClaims(token).getPayload();
+        return claims.getSubject();
+    }
+
+    public String getOtpPurpose(String token) {
+        Claims claims = Jwts.parser().verifyWith(getSigningKey()).build()
+            .parseSignedClaims(token).getPayload();
+        return claims.get("purpose", String.class);
     }
 
     public boolean validateToken(String token) {

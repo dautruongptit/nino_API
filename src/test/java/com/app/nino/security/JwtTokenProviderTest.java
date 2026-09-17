@@ -32,6 +32,7 @@ class JwtTokenProviderTest {
         ReflectionTestUtils.setField(provider, "jwtExpiration", ACCESS_MS);
         ReflectionTestUtils.setField(provider, "refreshExpiration", REFRESH_MS);
         ReflectionTestUtils.setField(provider, "tokenBlacklistService", tokenBlacklistService);
+        ReflectionTestUtils.setField(provider, "otpResetTokenTtlMinutes", 5L);
     }
 
     @Test
@@ -137,5 +138,43 @@ class JwtTokenProviderTest {
     @Test
     void getRefreshExpirationMs_returnsConfiguredValue() {
         assertEquals(REFRESH_MS, provider.getRefreshExpirationMs());
+    }
+
+    @Test
+    void generateOtpToken_embedsEmailPurposeAndType() {
+        String token = provider.generateOtpToken("user@example.com", "RESET_PASSWORD");
+
+        assertEquals("user@example.com", provider.getOtpEmail(token));
+        assertEquals("RESET_PASSWORD", provider.getOtpPurpose(token));
+        assertEquals("otp_reset", provider.getTokenType(token));
+    }
+
+    @Test
+    void generateOtpToken_embedsSidForFutureBlacklisting() {
+        String token = provider.generateOtpToken("user@example.com", "RESET_PIN");
+
+        assertNotNull(provider.getSid(token));
+    }
+
+    @Test
+    void generateOtpToken_hasConfiguredFiveMinuteWindow() {
+        String token = provider.generateOtpToken("user@example.com", "REGISTER");
+
+        Duration remaining = provider.getRemainingValidity(token);
+        long fiveMinutesMs = 5 * 60_000L;
+        assertTrue(remaining.toMillis() > fiveMinutesMs - 5000);
+        assertTrue(remaining.toMillis() <= fiveMinutesMs);
+    }
+
+    @Test
+    void generateOtpToken_isRejectedByValidateToken_whenItsSidIsBlacklisted() {
+        // Chung minh mot endpoint reset password/PIN (viec sau, ngoai pham vi
+        // task nay) co the vo hieu token nay sau khi dung 1 lan bang chinh
+        // TokenBlacklistService da co san — khong can code moi.
+        String token = provider.generateOtpToken("user@example.com", "RESET_PASSWORD");
+        String sid = provider.getSid(token);
+        when(tokenBlacklistService.isBlacklisted(sid)).thenReturn(true);
+
+        assertFalse(provider.validateToken(token));
     }
 }
