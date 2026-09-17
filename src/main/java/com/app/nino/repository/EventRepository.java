@@ -69,7 +69,23 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByRecurrenceTypeAndIsActiveTrue(Event.RecurrenceType recurrenceType);
 
     // ── Don dep Event tu Lich nghi le da qua han ─────────────────────────
-    @Query("SELECT e FROM Event e WHERE e.isHolidayReminder = true"
+    // JOIN FETCH e.reminders + e.user: HolidayReminderCleanupScheduler
+    // KHONG con @Transactional (xem comment cua lop do) nen khong co Hibernate
+    // session mo san luc vong lap doc event.getReminders()/getUser().getId() —
+    // phai fetch san 2 quan he LAZY nay trong chinh cau query, giong pattern
+    // EventReminderRepository.findDueCandidates() da dung cho ReminderScheduler.
+    // LEFT JOIN FETCH (khong phai inner JOIN) cho e.reminders: neu dung inner
+    // join, Event nao khong co reminder nao se bi loai khoi ket qua — sai so
+    // voi hanh vi cu (query goc khong loc theo reminders), bo sot event dang
+    // ly ra phai duoc don dep. e.user luon ton tai (nullable=false) nen dung
+    // inner JOIN FETCH la an toan.
+    // DISTINCT bat buoc: JOIN FETCH tren @OneToMany (e.reminders) nhan hang
+    // theo tich Descartes — 1 Event co N reminders se tra ve N dong trung id,
+    // gay xoa/detach lap trong vong lap ben scheduler.
+    @Query("SELECT DISTINCT e FROM Event e"
+         + " LEFT JOIN FETCH e.reminders"
+         + " JOIN FETCH e.user"
+         + " WHERE e.isHolidayReminder = true"
          + " AND e.eventDate < :today"
          + " AND e.isRecurring = false"
          + " AND e.relative IS NULL")
