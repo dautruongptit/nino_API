@@ -73,6 +73,11 @@ public class OtpService {
         String otpCode = generateOtp();
         redisTemplate.opsForValue().set(codeKey(purpose, email), hashOtp(otpCode), Duration.ofMinutes(ttlMinutes));
         redisTemplate.opsForValue().set(rateLimitKey, "1", Duration.ofSeconds(rateLimitSeconds));
+        // Xoa dem so lan thu sai cu — neu khong, mot yeu cau OTP moi sau khi
+        // da cham tran verify se van bi TooManyRequestsException ngay lan
+        // thu dau tien voi ma MOI (TTL 5 phut cua key attempts cu van con
+        // hieu luc), du loi khuyen cua chinh he thong la "yeu cau ma moi".
+        redisTemplate.delete(attemptsKey(purpose, email));
 
         resendEmailService.sendOtp(email, otpCode, purpose);
         log.info("[Otp] Da gui OTP: email={} purpose={}", email, purpose);
@@ -118,6 +123,13 @@ public class OtpService {
     private OtpVerifyResponse activateAndIssueTokens(String email) {
         User user = userRepo.findByEmail(email)
             .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+        if (!UserStatus.REGISTERED.getCode().equals(user.getStatus())) {
+            // Chi kich hoat tai khoan dang o trang thai cho xac minh (REG).
+            // Neu khong kiem tra, mot tai khoan da bi BAN/LCK/DEL boi admin
+            // van co the bi "hoi sinh" ve ACT + cap token dang nhap that chi
+            // bang cach xin lai OTP REGISTER qua email cu (bypass kiem duyet).
+            throw new BadRequestException("Tài khoản đã được xác minh hoặc không hợp lệ");
+        }
         user.setStatus(UserStatus.ACTIVE.getCode());
         userRepo.save(user);
 

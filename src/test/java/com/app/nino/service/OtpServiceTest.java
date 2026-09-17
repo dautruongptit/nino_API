@@ -121,6 +121,26 @@ class OtpServiceTest {
         assertDoesNotThrow(() -> service.requestOtp("nobody@b.com", OtpPurpose.RESET_PASSWORD));
 
         verify(resendEmailService, never()).sendOtp(any(), any(), any());
+        // Nua con lai cua yeu cau: van phai throttle (khong de bi do email
+        // hang loat khong gioi han) VA khong duoc ghi ma OTP nao ca (vi
+        // khong co gi de xac thuc voi mot email khong ton tai).
+        verify(valueOps).set(eq("auth:otp:ratelimit:RESET_PASSWORD:nobody@b.com"), eq("1"), eq(Duration.ofSeconds(60)));
+        verify(valueOps, never()).set(startsWith("auth:otp:code:"), any(), any());
+    }
+
+    @Test
+    void requestOtp_register_clearsStaleVerifyAttemptsCounter() {
+        // Sau khi cham tran so lan verify sai, verifyOtp() khuyen nguoi dung
+        // "yeu cau ma moi" — requestOtp() phai xoa dem attempts cu, neu
+        // khong ma MOI cung se bi tu choi ngay vi dem cu (TTL 5 phut) van
+        // con hieu luc.
+        when(redisTemplate.hasKey("auth:otp:ratelimit:REGISTER:a@b.com")).thenReturn(false);
+        when(userRepo.findByEmail("a@b.com")).thenReturn(Optional.of(User.builder().id(1L).email("a@b.com").build()));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+        service.requestOtp("a@b.com", OtpPurpose.REGISTER);
+
+        verify(redisTemplate).delete("auth:otp:attempts:REGISTER:a@b.com");
     }
 
     // ── verifyOtp ───────────────────────────────────────────────────────
@@ -144,6 +164,26 @@ class OtpServiceTest {
         verify(userRepo).save(user);
         verify(redisTemplate).delete("auth:otp:code:REGISTER:a@b.com");
         verify(redisTemplate).delete("auth:otp:attempts:REGISTER:a@b.com");
+    }
+
+    @Test
+    void verifyOtp_correctCode_forRegister_nonRegisteredStatus_throwsBadRequestAndDoesNotReactivate() {
+        // Neu tai khoan da bi admin chuyen sang BAN/LCK/DEL (khong con o
+        // trang thai REG cho xac minh), verifyOtp REGISTER khong duoc phep
+        // "hoi sinh" ve ACT va cap token dang nhap that chi vi nguoi giu
+        // hop thu email cu xin lai OTP dang ky.
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.increment("auth:otp:attempts:REGISTER:a@b.com")).thenReturn(1L);
+        when(valueOps.get("auth:otp:code:REGISTER:a@b.com")).thenReturn(sha256("123456"));
+        User bannedUser = User.builder().id(1L).email("a@b.com").status("BAN")
+            .roles(Set.of(Role.builder().name("ROLE_USER").build())).build();
+        when(userRepo.findByEmail("a@b.com")).thenReturn(Optional.of(bannedUser));
+
+        assertThrows(BadRequestException.class,
+            () -> service.verifyOtp("a@b.com", OtpPurpose.REGISTER, "123456"));
+
+        verify(userRepo, never()).save(any());
+        verify(jwtTokenProvider, never()).generateAccessToken(any(), any(), any());
     }
 
     @Test
