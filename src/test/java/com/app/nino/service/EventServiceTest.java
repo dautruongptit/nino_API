@@ -165,6 +165,25 @@ class EventServiceTest {
     }
 
     @Test
+    void update_alwaysClearsIsHolidayReminder_evenWhenRequestSetsTrue() {
+        User owner = User.builder().id(1L).build();
+        Event existing = Event.builder()
+                .id(50L)
+                .user(owner)
+                .isHolidayReminder(true)
+                .reminders(new ArrayList<>())
+                .build();
+        when(eventRepo.findById(50L)).thenReturn(java.util.Optional.of(existing));
+
+        CreateEventRequest req = baseRequest(null);
+        req.setIsHolidayReminder(true); // client trying to keep/re-set it — must be ignored
+
+        service.update(50L, 1L, req);
+
+        assertEquals(false, existing.getIsHolidayReminder());
+    }
+
+    @Test
     void update_whenEventHasNoRemindersAndRequestOmitsThem_addsDefaultReminderAtEventTime() {
         // Sự kiện cũ không có reminder nào (VD tạo trước khi có default này)
         // -> sửa sự kiện (không đụng tới reminders) cũng tự vá thêm 1 default.

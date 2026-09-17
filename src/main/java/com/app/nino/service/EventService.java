@@ -190,6 +190,10 @@ public class EventService {
                 ? Event.CustomIntervalUnit.valueOf(req.getCustomIntervalUnit()) : null);
         event.setNotes(req.getNotes());
 
+        // Bat ky lan sua nao cung "nhan" event nay thanh cua nguoi dung —
+        // khong bao gio doc gia tri tu req o day (xem Global Constraints).
+        event.setIsHolidayReminder(false);
+
         // Xoá reminders cũ, tạo lại từ request. Nếu một reminder cũ đã có
         // thông báo bắn ra (notifications.reminder_id trỏ vào nó), gỡ liên
         // kết đó trước — orphanRemoval sẽ DELETE reminder cũ khi flush, và
