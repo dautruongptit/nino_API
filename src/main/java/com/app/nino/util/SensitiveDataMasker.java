@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 public final class SensitiveDataMasker {
 
     private static final Pattern SENSITIVE_FIELD_PATTERN = Pattern.compile(
-        "(?i)\"(password|newPassword|oldPassword|token|accessToken|refreshToken|idToken|secret)\"\\s*:\\s*\"[^\"]*\"");
+        "(?i)\"(password|newPassword|oldPassword|token|accessToken|refreshToken|idToken|secret|otp|otpCode|resetToken)\"\\s*:\\s*\"[^\"]*\"");
 
     private SensitiveDataMasker() {}
 

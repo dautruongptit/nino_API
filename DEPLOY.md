@@ -62,6 +62,9 @@ GOOGLE_CLIENT_ID=<client_id>.apps.googleusercontent.com
 REDIS_HOST=redis
 REDIS_PORT=6380
 REDIS_PASSWORD=<password_redis>
+
+# Resend (gửi email OTP) — lấy API key tại resend.com
+RESEND_API_KEY=<api_key_tu_resend.com>
 ```
 
 > 🔒 **Bảo mật:** `JWT_SECRET` và `DB_PASSWORD` trong repo chỉ là giá trị mẫu cho dev — **phải đổi** trước khi go-live. Không commit `.env` thật lên git.
@@ -155,7 +158,7 @@ docker compose up --build -d
 
 ## 12. Checklist trước khi go-live
 
-- [ ] `.env` không commit git, đã đổi `JWT_SECRET` và `DB_PASSWORD` khỏi giá trị mẫu
+- [ ] `.env` không commit git, đã đổi `JWT_SECRET` và `DB_PASSWORD` khỏi giá trị mẫu, đã có `RESEND_API_KEY` hợp lệ
 - [ ] `firebase-service-account.json` đã có ở `src/main/resources/`
 - [ ] Log lúc start container không có lỗi Flyway (`FlywayException`/`Migration ... failed`) — Flyway tự chạy migration khi start, kiểm tra log để chắc đã áp dụng thành công (mục 3)
 - [ ] Network `shared-network` tồn tại, MySQL reachable, container `redis` cùng network

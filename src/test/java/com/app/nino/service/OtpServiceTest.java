@@ -143,6 +143,42 @@ class OtpServiceTest {
         verify(redisTemplate).delete("auth:otp:attempts:REGISTER:a@b.com");
     }
 
+    @Test
+    void requestOtp_registerWithAlreadyActiveAccount_silentlySucceedsWithoutSendingEmail() {
+        // requestOtp(REGISTER) khong duoc phep gui OTP moi cho tai khoan da
+        // qua trang thai REG (vd: da ACT) — verifyOtp se tu choi ma nay du
+        // sao, nen day chi la spam/ton quota email, va throw loi se tiet lo
+        // "tai khoan nay da duoc xac minh" cho nguoi khong chac la chu tai
+        // khoan.
+        when(redisTemplate.hasKey("auth:otp:ratelimit:REGISTER:a@b.com")).thenReturn(false);
+        User activeUser = User.builder().id(1L).email("a@b.com").status("ACT").build();
+        when(userRepo.findByEmail("a@b.com")).thenReturn(Optional.of(activeUser));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+        assertDoesNotThrow(() -> service.requestOtp("a@b.com", OtpPurpose.REGISTER));
+
+        verify(resendEmailService, never()).sendOtp(any(), any(), any());
+        verify(valueOps).set(eq("auth:otp:ratelimit:REGISTER:a@b.com"), eq("1"), eq(Duration.ofSeconds(60)));
+        verify(valueOps, never()).set(startsWith("auth:otp:code:"), any(), any());
+    }
+
+    @Test
+    void requestOtp_normalizesEmailCasingAndWhitespaceBeforeBuildingRedisKeysAndLookup() {
+        // Redis key case-sensitive nhung collation cua bang users la
+        // case-insensitive — phai chuan hoa email (trim + lowercase) truoc
+        // khi dung de xay Redis key hoac tra cuu userRepo, neu khong rate
+        // limit se bi bypass bang cach doi hoa/thuong email.
+        when(redisTemplate.hasKey("auth:otp:ratelimit:REGISTER:a@b.com")).thenReturn(false);
+        when(userRepo.findByEmail("a@b.com")).thenReturn(Optional.of(User.builder().id(1L).email("a@b.com").build()));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+        service.requestOtp(" A@B.com ", OtpPurpose.REGISTER);
+
+        verify(userRepo).findByEmail("a@b.com");
+        verify(valueOps).set(eq("auth:otp:code:REGISTER:a@b.com"), anyString(), eq(Duration.ofMinutes(5)));
+        verify(valueOps).set(eq("auth:otp:ratelimit:REGISTER:a@b.com"), eq("1"), eq(Duration.ofSeconds(60)));
+    }
+
     // ── verifyOtp ───────────────────────────────────────────────────────
 
     @Test
@@ -243,5 +279,23 @@ class OtpServiceTest {
         service.verifyOtp("a@b.com", OtpPurpose.REGISTER, "123456");
 
         verify(redisTemplate).expire("auth:otp:attempts:REGISTER:a@b.com", Duration.ofMinutes(5));
+    }
+
+    @Test
+    void verifyOtp_normalizesEmailCasingAndWhitespaceBeforeBuildingRedisKeys() {
+        // Neu requestOtp duoc goi voi mot dang chu hoa khac verifyOtp, ca hai
+        // deu phai chuan hoa ve cung mot Redis key — neu khong se bi loi "sai
+        // OTP" gia (Redis key khong khop) du nguoi dung nhap dung ma.
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.increment("auth:otp:attempts:REGISTER:a@b.com")).thenReturn(1L);
+        when(valueOps.get("auth:otp:code:REGISTER:a@b.com")).thenReturn(sha256("123456"));
+        User user = User.builder().id(1L).email("a@b.com").roles(Set.of(Role.builder().name("ROLE_USER").build())).build();
+        when(userRepo.findByEmail("a@b.com")).thenReturn(Optional.of(user));
+
+        OtpVerifyResponse result = service.verifyOtp(" A@B.com ", OtpPurpose.REGISTER, "123456");
+
+        assertTrue(result.isVerified());
+        verify(userRepo).findByEmail("a@b.com");
+        verify(redisTemplate).delete("auth:otp:code:REGISTER:a@b.com");
     }
 }

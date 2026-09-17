@@ -89,4 +89,22 @@ class ResendEmailServiceTest {
         assertThrows(BadRequestException.class,
             () -> spyService.sendOtp("user@example.com", "111111", OtpPurpose.REGISTER));
     }
+
+    @Test
+    void sendOtp_sendsCorrectlyShapedRequestToResend() {
+        when(templateEngine.process(eq("email/otp-verify"), any(Context.class))).thenReturn("<html>777666</html>");
+        ResendEmailService spyService = spy(service);
+        doNothing().when(spyService).postToResend(any());
+        ArgumentCaptor<ResendEmailService.ResendEmailRequest> captor =
+            ArgumentCaptor.forClass(ResendEmailService.ResendEmailRequest.class);
+
+        spyService.sendOtp("user@example.com", "777666", OtpPurpose.REGISTER);
+
+        verify(spyService).postToResend(captor.capture());
+        ResendEmailService.ResendEmailRequest sent = captor.getValue();
+        assertEquals("Nino <no-reply@nino.thongtinchinhhieu.site>", sent.from());
+        assertEquals(java.util.List.of("user@example.com"), sent.to());
+        assertEquals("Xác minh tài khoản Nino", sent.subject());
+        assertEquals("<html>777666</html>", sent.html());
+    }
 }

@@ -48,7 +48,9 @@ public class SecurityConfig {
                         "/auth/register",
                         "/auth/login",
                         "/auth/refresh",
-                        "/auth/google").permitAll()
+                        "/auth/google",
+                        "/auth/otp/request",
+                        "/auth/otp/verify").permitAll()
 
                 // ── Health check ──────────────────────────────────────
                 .requestMatchers(

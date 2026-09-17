@@ -19,6 +19,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,6 +53,8 @@ public class OtpService {
     private int maxVerifyAttempts;
 
     public void requestOtp(String email, OtpPurpose purpose) {
+        email = email.trim().toLowerCase(Locale.ROOT);
+
         String rateLimitKey = rateLimitKey(purpose, email);
         if (Boolean.TRUE.equals(redisTemplate.hasKey(rateLimitKey))) {
             throw new TooManyRequestsException("Vui lòng đợi trước khi yêu cầu gửi lại mã");
@@ -61,12 +64,14 @@ public class OtpService {
         if (purpose == OtpPurpose.REGISTER && user.isEmpty()) {
             throw new BadRequestException("Email chưa đăng ký");
         }
-        if (purpose != OtpPurpose.REGISTER && user.isEmpty()) {
-            // RESET_PASSWORD/RESET_PIN voi email khong ton tai — khong tiet
-            // lo qua response (chong do tim tai khoan), coi nhu da xu ly
-            // xong ma khong thuc su gui gi.
+        boolean registerAlreadyPastRegStatus = purpose == OtpPurpose.REGISTER
+            && !UserStatus.REGISTERED.getCode().equals(user.get().getStatus());
+        if ((purpose != OtpPurpose.REGISTER && user.isEmpty()) || registerAlreadyPastRegStatus) {
+            // RESET_PASSWORD/RESET_PIN voi email khong ton tai, HOAC REGISTER voi
+            // tai khoan da qua trang thai REG (da active/bi khoa/da xoa/...) — khong
+            // tiet lo qua response, coi nhu da xu ly xong ma khong thuc su gui gi.
             redisTemplate.opsForValue().set(rateLimitKey, "1", Duration.ofSeconds(rateLimitSeconds));
-            log.info("[Otp] Yeu cau OTP cho email khong ton tai (bo qua, khong tiet lo): purpose={}", purpose);
+            log.info("[Otp] Yeu cau OTP khong du dieu kien gui (bo qua, khong tiet lo): purpose={}", purpose);
             return;
         }
 
@@ -84,6 +89,8 @@ public class OtpService {
     }
 
     public OtpVerifyResponse verifyOtp(String email, OtpPurpose purpose, String submittedOtp) {
+        email = email.trim().toLowerCase(Locale.ROOT);
+
         String attemptsKey = attemptsKey(purpose, email);
         Long attempts = redisTemplate.opsForValue().increment(attemptsKey);
         if (attempts != null && attempts == 1L) {
