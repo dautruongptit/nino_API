@@ -7,8 +7,12 @@ import com.app.nino.repository.UserDeviceRepository;
 import com.app.nino.repository.UserRepository;
 import com.app.nino.security.JwtTokenProvider;
 import com.app.nino.security.TokenBlacklistService;
+import com.app.nino.model.dto.request.RegisterRequest;
+import com.app.nino.model.dto.response.AuthResponse;
+import com.app.nino.model.entity.Role;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +44,29 @@ class AuthServiceTest {
 
     @InjectMocks
     private AuthService service;
+
+    // ── REGISTER ─────────────────────────────────────────────────────────
+    @Test
+    void register_setsStatusToRegistered_andReturnsNoSessionTokens() {
+        RegisterRequest req = new RegisterRequest();
+        req.setFullName("Nguyen Van A");
+        req.setEmail("new@example.com");
+        req.setPassword("password123");
+        when(userRepo.existsByEmail("new@example.com")).thenReturn(false);
+        when(roleRepo.findByName("ROLE_USER"))
+            .thenReturn(java.util.Optional.of(Role.builder().name("ROLE_USER").build()));
+        when(passwordEncoder.encode("password123")).thenReturn("hashed");
+        ArgumentCaptor<User> savedUser = ArgumentCaptor.forClass(User.class);
+
+        AuthResponse response = service.register(req);
+
+        verify(userRepo).save(savedUser.capture());
+        assertEquals("REG", savedUser.getValue().getStatus());
+        assertNull(response.getAccessToken());
+        assertNull(response.getRefreshToken());
+        assertEquals("new@example.com", response.getEmail());
+        verifyNoInteractions(jwtTokenProvider);
+    }
 
     // ── LOGOUT ───────────────────────────────────────────────────────────
 

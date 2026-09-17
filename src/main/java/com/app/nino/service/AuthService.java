@@ -90,7 +90,14 @@ public class AuthService {
             .fullName(req.getFullName())
             .email(req.getEmail())
             .passwordHash(passwordEncoder.encode(req.getPassword()))
-            .status("ACT")  // Chua co ha tang xac minh email — kich hoat ngay khi register
+            // "REG" — tai khoan CHUA the dang nhap (User.canLogin() da loai
+            // tru status nay) cho toi khi xac minh email qua OTP (xem
+            // OtpService.verifyOtp, purpose=REGISTER). KHONG tra ve
+            // accessToken/refreshToken ngay o day — JwtAuthFilter tin thang
+            // claim trong token ma khong kiem tra lai canLogin() moi request,
+            // nen phat token dung ngay tai day se cho phep tai khoan CHUA
+            // xac minh dung duoc moi API nhu binh thuong — phai doi toi luc
+            // OTP verify thanh cong moi phat token that.
             // HashSet (khong dung Set.of()) — Hibernate can goi .clear() tren
             // collection nay khi merge/update entity ve sau; Set.of() la immutable
             // se nem UnsupportedOperationException luc do.
@@ -98,14 +105,9 @@ public class AuthService {
             .build();
 
         userRepo.save(user);
-        log.info("[Auth] Dang ky thanh cong: userId={} email={}", user.getId(), user.getEmail());
-
-        String sid = UUID.randomUUID().toString();
-        String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), sid);
+        log.info("[Auth] Dang ky thanh cong, cho xac minh OTP: userId={} email={}", user.getId(), user.getEmail());
 
         return AuthResponse.builder()
-            .accessToken(accessToken).refreshToken(refreshToken)
             .userId(user.getId()).fullName(user.getFullName()).email(user.getEmail())
             .build();
     }
