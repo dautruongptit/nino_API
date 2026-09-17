@@ -128,6 +128,16 @@ app:
     login-max: ${RATE_LIMIT_LOGIN_MAX:10}
     register-max: ${RATE_LIMIT_REGISTER_MAX:5}
     default-max: ${RATE_LIMIT_DEFAULT_MAX:30}
+  # OTP qua Resend — dang ky/quen mat khau/quen PIN. api-key BAT BUOC,
+  # khong co default (giong DB_PASSWORD/JWT_SECRET) — fail-fast neu quen cau hinh.
+  resend:
+    api-key: ${RESEND_API_KEY}
+    from: "Nino <no-reply@nino.thongtinchinhhieu.site>"
+  otp:
+    ttl-minutes: ${OTP_TTL_MINUTES:5}
+    rate-limit-seconds: ${OTP_RATE_LIMIT_SECONDS:60}
+    max-verify-attempts: ${OTP_MAX_VERIFY_ATTEMPTS:5}
+    reset-token-ttl-minutes: ${OTP_RESET_TOKEN_TTL_MINUTES:5}
 # ── ACTUATOR ────────────────────────────────────────────────────
 management:
   endpoints:

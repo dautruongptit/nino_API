@@ -23,6 +23,12 @@ public class GlobalExceptionHandler {
             .body(BaseResponse.error(e.getMessage(), "BAD_REQUEST"));
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<BaseResponse<?>> handleTooManyRequests(TooManyRequestsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .body(BaseResponse.error(e.getMessage(), "TOO_MANY_REQUESTS"));
+    }
+
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<BaseResponse<?>> handleUnauthorized(UnauthorizedException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
