@@ -60,4 +60,5 @@ logs/
 .DS_Store
 Thumbs.db
 firebase-service-account.json
-src/main/resources/firebase-service-account.json.worktrees/
+src/main/resources/firebase-service-account.json
+.worktrees/
