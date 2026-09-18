@@ -33,7 +33,8 @@ public class NotificationTemplateService {
 
     public NotificationContent build(Event event, EventReminder reminder) {
         EventCategory category = event.getCategory();
-        String emoji = ICON_EMOJI.getOrDefault(category.getIcon(), DEFAULT_ICON_EMOJI);
+        String icon = category.getIcon();
+        String emoji = icon != null ? ICON_EMOJI.getOrDefault(icon, DEFAULT_ICON_EMOJI) : DEFAULT_ICON_EMOJI;
         boolean daysScale = isDaysScale(reminder);
         String title = emoji + " " + category.getDisplayName() + (daysScale ? " sắp tới" : " sắp đến");
         String body = subject(event, category) + " · " + timingPhrase(reminder);

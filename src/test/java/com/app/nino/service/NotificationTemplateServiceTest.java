@@ -112,6 +112,15 @@ class NotificationTemplateServiceTest {
         assertEquals("🔔 Du lịch sắp tới", content.title());
     }
 
+    @Test
+    void build_nullIcon_fallsBackToBellEmoji() {
+        // Defensive guard: even though EventCategory.icon is non-nullable at DB level,
+        // defensive coding ensures null doesn't cause NullPointerException.
+        Event event = baseEvent(category("KHAC", "Khác", null)).build();
+        var content = service.build(event, baseReminder().remindDaysBefore(1).build());
+        assertEquals("🔔 Khác sắp tới", content.title());
+    }
+
     // ── Body: subject theo category + timing phrase ─────────────────────────
 
     @Test
