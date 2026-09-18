@@ -8,6 +8,7 @@ import com.app.nino.model.entity.User;
 import com.app.nino.model.entity.UserStatus;
 import com.app.nino.repository.UserRepository;
 import com.app.nino.security.JwtTokenProvider;
+import com.app.nino.security.TokenBlacklistService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +43,7 @@ public class OtpService {
     private final ResendEmailService resendEmailService;
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepo;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Value("${app.otp.ttl-minutes:5}")
     private long ttlMinutes;
@@ -179,5 +181,29 @@ public class OtpService {
 
     private String attemptsKey(OtpPurpose purpose, String email) {
         return KEY_PREFIX + "attempts:" + purpose + ":" + email;
+    }
+
+    /** Xac nhan mot lan reset PIN sau khi da verify OTP thanh cong (purpose
+     *  RESET_PIN). KHONG co gi de "reset" o server (PIN 100% local, xem
+     *  AppLockService ben mobile) — day chi la buoc audit + lam resetToken
+     *  khong the dung lai lan thu 2. */
+    public void confirmPinReset(String resetToken) {
+        if (!jwtTokenProvider.validateToken(resetToken)) {
+            throw new BadRequestException("Token không hợp lệ hoặc đã hết hạn");
+        }
+        boolean isPinResetToken = "otp_reset".equals(jwtTokenProvider.getTokenType(resetToken))
+            && OtpPurpose.RESET_PIN.name().equals(jwtTokenProvider.getOtpPurpose(resetToken));
+        if (!isPinResetToken) {
+            throw new BadRequestException("Token không hợp lệ hoặc đã hết hạn");
+        }
+
+        String email = jwtTokenProvider.getOtpEmail(resetToken);
+        User user = userRepo.findByEmail(email)
+            .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+
+        log.info("[Otp] Xac nhan reset PIN qua email: userId={} email={}", user.getId(), email);
+        tokenBlacklistService.blacklist(
+            jwtTokenProvider.getSid(resetToken),
+            jwtTokenProvider.getRemainingValidity(resetToken));
     }
 }

@@ -3,6 +3,7 @@ package com.app.nino.controller;
 import com.app.nino.exception.BadRequestException;
 import com.app.nino.model.dto.request.OtpRequestRequest;
 import com.app.nino.model.dto.request.OtpVerifyRequest;
+import com.app.nino.model.dto.request.ResetPinRequest;
 import com.app.nino.model.dto.response.BaseResponse;
 import com.app.nino.model.dto.response.OtpVerifyResponse;
 import com.app.nino.service.OtpService;
@@ -41,5 +42,12 @@ public class OtpController {
             throw new BadRequestException("Mã OTP không đúng hoặc đã hết hạn");
         }
         return ResponseEntity.ok(BaseResponse.success(result));
+    }
+
+    @PostMapping("/reset-pin")
+    @Operation(summary = "Xác nhận reset PIN qua token OTP tạm (RESET_PIN)")
+    public ResponseEntity<BaseResponse<?>> resetPin(@Valid @RequestBody ResetPinRequest req) {
+        otpService.confirmPinReset(req.getResetToken());
+        return ResponseEntity.ok(BaseResponse.success(null, "Đã xác nhận, có thể đặt mã PIN mới"));
     }
 }

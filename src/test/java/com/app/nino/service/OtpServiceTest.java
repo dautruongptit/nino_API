@@ -8,6 +8,7 @@ import com.app.nino.model.entity.Role;
 import com.app.nino.model.entity.User;
 import com.app.nino.repository.UserRepository;
 import com.app.nino.security.JwtTokenProvider;
+import com.app.nino.security.TokenBlacklistService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,7 @@ class OtpServiceTest {
     @Mock private ResendEmailService resendEmailService;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private UserRepository userRepo;
+    @Mock private TokenBlacklistService tokenBlacklistService;
 
     @InjectMocks
     private OtpService service;
@@ -297,5 +299,63 @@ class OtpServiceTest {
         assertTrue(result.isVerified());
         verify(userRepo).findByEmail("a@b.com");
         verify(redisTemplate).delete("auth:otp:code:REGISTER:a@b.com");
+    }
+
+    // ── confirmPinReset ─────────────────────────────────────────────────
+
+    @Test
+    void confirmPinReset_validResetPinToken_blacklistsSidAndSucceeds() {
+        when(jwtTokenProvider.validateToken("reset-tok")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("reset-tok")).thenReturn("otp_reset");
+        when(jwtTokenProvider.getOtpPurpose("reset-tok")).thenReturn("RESET_PIN");
+        when(jwtTokenProvider.getOtpEmail("reset-tok")).thenReturn("a@b.com");
+        when(userRepo.findByEmail("a@b.com")).thenReturn(Optional.of(User.builder().id(1L).email("a@b.com").build()));
+        when(jwtTokenProvider.getSid("reset-tok")).thenReturn("sid-123");
+        when(jwtTokenProvider.getRemainingValidity("reset-tok")).thenReturn(Duration.ofMinutes(3));
+
+        assertDoesNotThrow(() -> service.confirmPinReset("reset-tok"));
+
+        verify(tokenBlacklistService).blacklist("sid-123", Duration.ofMinutes(3));
+    }
+
+    @Test
+    void confirmPinReset_invalidToken_throwsBadRequest() {
+        when(jwtTokenProvider.validateToken("bad-tok")).thenReturn(false);
+
+        assertThrows(BadRequestException.class, () -> service.confirmPinReset("bad-tok"));
+        verify(tokenBlacklistService, never()).blacklist(any(), any());
+    }
+
+    @Test
+    void confirmPinReset_wrongTokenType_throwsBadRequest() {
+        // Vd mot access token that bi gui nham vao day.
+        when(jwtTokenProvider.validateToken("access-tok")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("access-tok")).thenReturn("access");
+
+        assertThrows(BadRequestException.class, () -> service.confirmPinReset("access-tok"));
+        verify(tokenBlacklistService, never()).blacklist(any(), any());
+    }
+
+    @Test
+    void confirmPinReset_wrongPurpose_throwsBadRequest() {
+        // Token duoc cap cho luong RESET_PASSWORD, khong duoc dung o day.
+        when(jwtTokenProvider.validateToken("reset-tok")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("reset-tok")).thenReturn("otp_reset");
+        when(jwtTokenProvider.getOtpPurpose("reset-tok")).thenReturn("RESET_PASSWORD");
+
+        assertThrows(BadRequestException.class, () -> service.confirmPinReset("reset-tok"));
+        verify(tokenBlacklistService, never()).blacklist(any(), any());
+    }
+
+    @Test
+    void confirmPinReset_unknownEmail_throwsBadRequest() {
+        when(jwtTokenProvider.validateToken("reset-tok")).thenReturn(true);
+        when(jwtTokenProvider.getTokenType("reset-tok")).thenReturn("otp_reset");
+        when(jwtTokenProvider.getOtpPurpose("reset-tok")).thenReturn("RESET_PIN");
+        when(jwtTokenProvider.getOtpEmail("reset-tok")).thenReturn("nobody@b.com");
+        when(userRepo.findByEmail("nobody@b.com")).thenReturn(Optional.empty());
+
+        assertThrows(BadRequestException.class, () -> service.confirmPinReset("reset-tok"));
+        verify(tokenBlacklistService, never()).blacklist(any(), any());
     }
 }
