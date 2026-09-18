@@ -142,6 +142,20 @@ class NotificationTemplateServiceTest {
     }
 
     @Test
+    void build_birthdayWithRelativeNickname_bodyPrefersNicknameOverName() {
+        // RelativeService.java:267 uu tien nickname hon ten that khi hien thi
+        // — notification phai theo dung quy tac nay, khong duoc dung
+        // getName() suong khi nickname da co san.
+        Relative relative = Relative.builder().id(5L).name("Nguyễn Thị A").nickname("Mẹ").build();
+        Event event = Event.builder().id(1L).title("Sinh nhật Mẹ")
+            .category(category("SINH_NHAT", "Sinh nhật", "cake")).relative(relative).build();
+
+        var content = service.build(event, baseReminder().remindDaysBefore(1).build());
+
+        assertEquals("Sinh nhật Mẹ · Ngày mai", content.body());
+    }
+
+    @Test
     void build_birthdayWithoutRelative_bodyUsesEventTitleWithoutDoublingPrefix() {
         // event.getTitle() đã là "Sinh nhật của tôi" — KHÔNG được cộng thêm
         // "Sinh nhật " lần nữa.

@@ -13,7 +13,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -65,9 +64,10 @@ public class ReminderScheduler {
         // suốt thời gian không có backend nào chạy. Mốc càng cũ càng hết
         // giá trị cảnh báo sớm (nhắc "7 ngày trước" khi chỉ còn 1 tiếng
         // nữa là vô nghĩa) và bắn hết tất cả chỉ dồn cục N thông báo giống
-        // hệt nhau (buildBody không phân biệt theo mốc nào) nhân thêm với
-        // số thiết bị đã đăng ký của user — đây là nguyên nhân thực tế
-        // khiến 1 sự kiện dội về nhiều thông báo trùng lặp cùng lúc (xem
+        // hệt nhau (cách dựng nội dung hardcode trước đây không phân biệt
+        // theo mốc nào) nhân thêm với số thiết bị đã đăng ký của user —
+        // đây là nguyên nhân thực tế khiến 1 sự kiện dội về nhiều thông
+        // báo trùng lặp cùng lúc (xem
         // trao đổi 2026-09-12: sự kiện "ffff" dội 4 mốc x 3 thiết bị cùng
         // lúc 12:30 dù giờ sự kiện là 14:00).
         Map<Long, List<DueReminder>> dueByEvent = candidates.stream()

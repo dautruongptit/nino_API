@@ -3,6 +3,7 @@ package com.app.nino.service;
 import com.app.nino.model.entity.Event;
 import com.app.nino.model.entity.EventCategory;
 import com.app.nino.model.entity.EventReminder;
+import com.app.nino.model.entity.Relative;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -52,9 +53,16 @@ public class NotificationTemplateService {
         // RelativeService tao Event "Sinh nhat" voi title da la "Sinh nhat " +
         // displayName (xem RelativeService.java:271) — khong duoc cong them
         // "Sinh nhat " lan nua o day khi khong co relative, se bi lap chu.
-        return event.getRelative() != null
-            ? "Sinh nhật " + event.getRelative().getName()
-            : event.getTitle();
+        if (event.getRelative() == null) {
+            return event.getTitle();
+        }
+        Relative relative = event.getRelative();
+        // Uu tien nickname hon ten that, giong quy tac hien thi da thiet lap
+        // o RelativeService.java:267 — nickname than mat hon (vd "Me" thay vi
+        // "Nguyen Thi A"), dong bo voi title cua chinh Event sinh nhat do
+        // RelativeService tu tao.
+        String displayName = relative.getNickname() != null ? relative.getNickname() : relative.getName();
+        return "Sinh nhật " + displayName;
     }
 
     private String timingPhrase(EventReminder reminder) {
