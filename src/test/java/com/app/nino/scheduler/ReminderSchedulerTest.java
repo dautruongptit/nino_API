@@ -2,15 +2,18 @@ package com.app.nino.scheduler;
 
 import com.app.nino.model.entity.Event;
 import com.app.nino.model.entity.EventReminder;
+import com.app.nino.model.entity.EventCategory;
 import com.app.nino.model.entity.Notification;
 import com.app.nino.model.entity.User;
 import com.app.nino.repository.EventReminderRepository;
 import com.app.nino.repository.NotificationRepository;
 import com.app.nino.service.FcmService;
+import com.app.nino.service.NotificationTemplateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -40,6 +43,9 @@ class ReminderSchedulerTest {
     @Mock
     private FcmService fcmService;
 
+    @Spy
+    private NotificationTemplateService templateService = new NotificationTemplateService();
+
     @InjectMocks
     private ReminderScheduler scheduler;
 
@@ -52,6 +58,7 @@ class ReminderSchedulerTest {
             .id(9L)
             .user(user())
             .title("Họp nhóm")
+            .category(EventCategory.builder().code("KHAC").displayName("Khác").icon("more_horiz").build())
             .eventDate(date)
             .eventTime(time)
             .isActive(true)

@@ -6,6 +6,7 @@ import com.app.nino.model.entity.Notification;
 import com.app.nino.repository.EventReminderRepository;
 import com.app.nino.repository.NotificationRepository;
 import com.app.nino.service.FcmService;
+import com.app.nino.service.NotificationTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -31,6 +32,7 @@ public class ReminderScheduler {
     private final NotificationRepository  notifRepo;
     private final CacheManager            cacheManager;
     private final FcmService              fcmService;
+    private final NotificationTemplateService templateService;
 
     /**
      * Quét mỗi 5 phút thay vì 1 lần/ngày lúc 8h — dùng
@@ -161,8 +163,9 @@ public class ReminderScheduler {
     }
 
     private void fireReminder(EventReminder reminder, Event event, LocalDateTime now) {
-        String title = "Nhắc nhở: " + event.getTitle();
-        String body  = buildBody(event);
+        NotificationTemplateService.NotificationContent content = templateService.build(event, reminder);
+        String title = content.title();
+        String body  = content.body();
 
         Notification notif = Notification.builder()
             .user(event.getUser())
@@ -213,8 +216,4 @@ public class ReminderScheduler {
         }
     }
 
-    private String buildBody(Event event) {
-        return String.format("Sự kiện '%s' diễn ra vào ngày %s",
-            event.getTitle(), event.getEventDate());
-    }
 }
