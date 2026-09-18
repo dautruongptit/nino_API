@@ -51,7 +51,7 @@ public class SecurityConfig {
                         "/auth/google",
                         "/auth/otp/request",
                         "/auth/otp/verify",
-                        "/auth/reset-pin").permitAll()
+                        "/auth/otp/reset-pin").permitAll()
 
                 // ── Health check ──────────────────────────────────────
                 .requestMatchers(
