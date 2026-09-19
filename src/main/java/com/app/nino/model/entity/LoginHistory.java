@@ -43,6 +43,11 @@ public class LoginHistory {
     @Column(name = "country", length = 100)
     private String country;
 
+    /** Thanh pho tra tu IP qua GeoIpService (bat dong bo, sau khi da tra ve
+     *  response login) — NULL neu chua tra xong/IP private/tra loi. */
+    @Column(name = "city", length = 100)
+    private String city;
+
     @Column(name = "is_success", nullable = false)
     private Boolean isSuccess;
 

@@ -71,6 +71,7 @@ public class AuthService {
     private final PasswordEncoder        passwordEncoder;
     private final JwtTokenProvider       jwtTokenProvider;
     private final TokenBlacklistService  tokenBlacklistService; // NEW
+    private final GeoIpService           geoIpService;
 
     // ── REGISTER ──────────────────────────────────────────────────────────────
     @Transactional
@@ -152,7 +153,8 @@ public class AuthService {
         String sid = UUID.randomUUID().toString();
         LocalDateTime refreshExpiresAt = LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs()));
         handleSuccessLogin(user, ip);
-        saveLoginHistory(user, ip, userAgent, req.getDeviceName(), true, null, sid, refreshExpiresAt);
+        LoginHistory history = saveLoginHistory(user, ip, userAgent, req.getDeviceName(), true, null, sid, refreshExpiresAt);
+        geoIpService.lookupAndUpdate(history.getId(), ip);
         log.info("[Auth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
         String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
@@ -540,9 +542,9 @@ public class AuthService {
         userRepo.save(user);
     }
 
-    private void saveLoginHistory(User user, String ip, String userAgent, String deviceName,
-                                   boolean success, LoginHistory.FailureReason reason,
-                                   String sessionId, LocalDateTime refreshExpiresAt) {
+    private LoginHistory saveLoginHistory(User user, String ip, String userAgent, String deviceName,
+                                           boolean success, LoginHistory.FailureReason reason,
+                                           String sessionId, LocalDateTime refreshExpiresAt) {
         LoginHistory history = LoginHistory.builder()
             .user(user)
             .ipAddress(ip)
@@ -557,5 +559,6 @@ public class AuthService {
             .refreshExpiresAt(refreshExpiresAt)
             .build();
         loginHistoryRepo.save(history);
+        return history;
     }
 }

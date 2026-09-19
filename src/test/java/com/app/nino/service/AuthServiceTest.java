@@ -41,6 +41,7 @@ class AuthServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private TokenBlacklistService tokenBlacklistService;
+    @Mock private GeoIpService geoIpService;
 
     @InjectMocks
     private AuthService service;
@@ -305,6 +306,54 @@ class AuthServiceTest {
         assertEquals("Pixel 8", captor.getValue().getDeviceName());
         assertNotNull(captor.getValue().getSessionId());
         assertNotNull(captor.getValue().getRefreshExpiresAt());
+    }
+
+    @Test
+    void login_success_triggersGeoIpLookupWithSavedHistoryIdAndIp() {
+        User user = User.builder().id(1L).email("a@b.com")
+            .passwordHash("hashed").status("ACT").roles(new java.util.HashSet<>()).build();
+        when(userRepo.findByEmail("a@b.com")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("pw", "hashed")).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(any(), any(), any())).thenReturn("access-1");
+        when(jwtTokenProvider.generateRefreshToken(any(), any())).thenReturn("refresh-1");
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
+
+        jakarta.servlet.http.HttpServletRequest httpRequest =
+            org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(httpRequest.getHeader("User-Agent")).thenReturn("okhttp/4.12");
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(httpRequest.getRemoteAddr()).thenReturn("8.8.8.8");
+
+        com.app.nino.model.dto.request.LoginRequest req = new com.app.nino.model.dto.request.LoginRequest();
+        req.setEmail("a@b.com");
+        req.setPassword("pw");
+
+        service.login(req, httpRequest);
+
+        verify(geoIpService).lookupAndUpdate(any(), eq("8.8.8.8"));
+    }
+
+    @Test
+    void login_wrongPassword_doesNotTriggerGeoIpLookup() {
+        User user = User.builder().id(1L).email("a@b.com")
+            .passwordHash("hashed").status("ACT").roles(new java.util.HashSet<>()).build();
+        when(userRepo.findByEmail("a@b.com")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+
+        jakarta.servlet.http.HttpServletRequest httpRequest =
+            org.mockito.Mockito.mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(httpRequest.getHeader("User-Agent")).thenReturn("okhttp/4.12");
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(httpRequest.getRemoteAddr()).thenReturn("8.8.8.8");
+
+        com.app.nino.model.dto.request.LoginRequest req = new com.app.nino.model.dto.request.LoginRequest();
+        req.setEmail("a@b.com");
+        req.setPassword("wrong");
+
+        assertThrows(com.app.nino.exception.UnauthorizedException.class,
+            () -> service.login(req, httpRequest));
+
+        verifyNoInteractions(geoIpService);
     }
 
     // ── REFRESH TOKEN — session continuity ──────────────────────────────────

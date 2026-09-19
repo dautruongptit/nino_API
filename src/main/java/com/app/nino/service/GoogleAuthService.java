@@ -41,6 +41,7 @@ public class GoogleAuthService {
     private final LoginHistoryRepository loginHistoryRepo;
     private final JwtTokenProvider       jwtTokenProvider;
     private final GoogleIdTokenVerifier  googleIdTokenVerifier;
+    private final GeoIpService           geoIpService;
 
     @Transactional
     public AuthResponse loginWithGoogle(String idToken, HttpServletRequest httpRequest, String deviceName) {
@@ -87,7 +88,8 @@ public class GoogleAuthService {
         java.time.LocalDateTime refreshExpiresAt =
             java.time.LocalDateTime.now().plus(java.time.Duration.ofMillis(jwtTokenProvider.getRefreshExpirationMs()));
         handleSuccessLogin(user, ip);
-        saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"), deviceName, sid, refreshExpiresAt);
+        LoginHistory history = saveLoginHistory(user, ip, httpRequest.getHeader("User-Agent"), deviceName, sid, refreshExpiresAt);
+        geoIpService.lookupAndUpdate(history.getId(), ip);
         log.info("[GoogleAuth] Login thanh cong: userId={} ip={}", user.getId(), ip);
 
         String accessToken  = jwtTokenProvider.generateAccessToken(user.getId(), user.getRoles(), sid);
@@ -143,8 +145,8 @@ public class GoogleAuthService {
         userRepo.save(user);
     }
 
-    private void saveLoginHistory(User user, String ip, String userAgent, String deviceName,
-                                   String sessionId, java.time.LocalDateTime refreshExpiresAt) {
+    private LoginHistory saveLoginHistory(User user, String ip, String userAgent, String deviceName,
+                                           String sessionId, java.time.LocalDateTime refreshExpiresAt) {
         LoginHistory history = LoginHistory.builder()
             .user(user)
             .ipAddress(ip)
@@ -158,5 +160,6 @@ public class GoogleAuthService {
             .refreshExpiresAt(refreshExpiresAt)
             .build();
         loginHistoryRepo.save(history);
+        return history;
     }
 }

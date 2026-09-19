@@ -1,13 +1,16 @@
 package com.app.nino.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.time.Duration;
 import java.util.concurrent.Executor;
 
 @Configuration
@@ -34,6 +37,29 @@ public class AppConfig {
         executor.setThreadNamePrefix("request-log-");
         executor.initialize();
         return executor;
+    }
+
+    /** Pool rieng, nho, cho GeoIpService.lookupAndUpdate — chay sau khi da tra
+     *  response login, khong bao gio duoc lam nghen cac tac vu async khac. */
+    @Bean(name = "geoIpExecutor")
+    public Executor geoIpExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("geo-ip-");
+        executor.initialize();
+        return executor;
+    }
+
+    /** Timeout ngan (2s) — tra vi tri la tinh nang phu, khong duoc de mot lan
+     *  goi ip-api cham/treo chiem thread lau. */
+    @Bean(name = "geoIpRestTemplate")
+    public RestTemplate geoIpRestTemplate(RestTemplateBuilder builder) {
+        return builder
+            .setConnectTimeout(Duration.ofSeconds(2))
+            .setReadTimeout(Duration.ofSeconds(2))
+            .build();
     }
 
     @Bean

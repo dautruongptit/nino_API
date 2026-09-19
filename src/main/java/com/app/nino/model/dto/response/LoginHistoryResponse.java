@@ -15,6 +15,7 @@ public class LoginHistoryResponse {
     private String        os;           // Windows | macOS | Android | iOS
     private String        browser;      // Chrome | Safari | Firefox | Edge
     private String        country;
+    private String        city;
     private Boolean       isSuccess;
     private String        failureReason;
     private LocalDateTime loginAt;
@@ -30,6 +31,7 @@ public class LoginHistoryResponse {
             .os(h.getOs())
             .browser(h.getBrowser())
             .country(h.getCountry())
+            .city(h.getCity())
             .isSuccess(h.getIsSuccess())
             .failureReason(h.getFailureReason() != null ? h.getFailureReason().name() : null)
             .loginAt(h.getLoginAt())

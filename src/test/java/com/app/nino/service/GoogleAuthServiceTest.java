@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +38,7 @@ class GoogleAuthServiceTest {
     @Mock private GoogleIdTokenVerifier googleIdTokenVerifier;
     @Mock private GoogleIdToken googleIdToken;
     @Mock private HttpServletRequest httpRequest;
+    @Mock private GeoIpService geoIpService;
 
     @InjectMocks
     private GoogleAuthService service;
@@ -115,5 +117,20 @@ class GoogleAuthServiceTest {
         assertEquals("iPhone 15 Pro", captor.getValue().getDeviceName());
         assertNotNull(captor.getValue().getSessionId());
         assertNotNull(captor.getValue().getRefreshExpiresAt());
+    }
+
+    @Test
+    void loginWithGoogle_success_triggersGeoIpLookupWithSavedHistoryIdAndIp() {
+        when(googleIdToken.getPayload()).thenReturn(payloadWith("g-1", "a@b.com", "pic.jpg"));
+        User user = User.builder().id(1L).email("a@b.com")
+            .authProvider(User.AuthProvider.GOOGLE).status("ACT")
+            .roles(new HashSet<>()).build();
+        when(userRepo.findByGoogleId("g-1")).thenReturn(Optional.of(user));
+        when(jwtTokenProvider.getRefreshExpirationMs()).thenReturn(604_800_000L);
+        when(httpRequest.getRemoteAddr()).thenReturn("8.8.8.8");
+
+        service.loginWithGoogle("id-token", httpRequest, null);
+
+        verify(geoIpService).lookupAndUpdate(any(), eq("8.8.8.8"));
     }
 }
